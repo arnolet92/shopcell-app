@@ -1,0 +1,33 @@
+name: Build iOS (sans signature)
+
+# Compile l'app pour iOS sur un runner macOS hébergé par GitHub — aucun Mac
+# nécessaire de ton côté. Sans certificat Apple Developer, on ne peut pas
+# encore produire un .ipa installable (ça viendra une fois le compte
+# développeur Apple en place) ; ce workflow sert avant tout à vérifier que
+# le code compile bien pour iOS.
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Installer les dépendances
+        run: flutter pub get
+
+      - name: Compiler pour iOS (sans signature)
+        run: flutter build ios --release --no-codesign
+
+      - name: Archiver le résultat
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShopCell-ios-build
+          path: build/ios/iphoneos/Runner.app
