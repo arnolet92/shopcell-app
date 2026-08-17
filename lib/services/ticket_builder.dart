@@ -1,5 +1,6 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
+import '../models/payment_split.dart';
 import '../models/produit_model.dart';
 import 'cart_service.dart';
 
@@ -21,8 +22,7 @@ class TicketBuilder {
     required String cashierName,
     required List<CartLine> lines,
     required double total,
-    double? montantDonne,
-    String? typePaiementLabel,
+    List<PaymentSplit>? paiements,
     String? clientName,
   }) async {
     final profile = await CapabilityProfile.load();
@@ -65,7 +65,14 @@ class TicketBuilder {
       PosColumn(text: 'TOTAL', width: 6, styles: const PosStyles(bold: true)),
       PosColumn(text: _money(total), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
     ]));
-    if (montantDonne != null) {
+    if (paiements != null && paiements.isNotEmpty) {
+      final montantDonne = paiements.fold(0.0, (sum, p) => sum + p.montant);
+      for (final p in paiements) {
+        bytes.addAll(generator.row([
+          PosColumn(text: 'Paiement (${p.typeLabel})', width: 7),
+          PosColumn(text: _money(p.montant), width: 5, styles: const PosStyles(align: PosAlign.right)),
+        ]));
+      }
       bytes.addAll(generator.row([
         PosColumn(text: 'Montant donné', width: 6),
         PosColumn(text: _money(montantDonne), width: 6, styles: const PosStyles(align: PosAlign.right)),
@@ -74,9 +81,6 @@ class TicketBuilder {
         PosColumn(text: 'Monnaie', width: 6),
         PosColumn(text: _money(montantDonne - total), width: 6, styles: const PosStyles(align: PosAlign.right)),
       ]));
-    }
-    if (typePaiementLabel != null) {
-      bytes.addAll(generator.text('Paiement : $typePaiementLabel'));
     }
 
     bytes.addAll(generator.feed(1));

@@ -32,6 +32,7 @@ class ProduitGroupCard extends StatefulWidget {
     this.showValiderAction = false,
     this.onEdit,
     this.onValider,
+    this.onTapUnit,
   });
 
   final ProduitGroup group;
@@ -40,6 +41,10 @@ class ProduitGroupCard extends StatefulWidget {
   final bool showValiderAction;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
+  /// Si renseigné, remplace le comportement par défaut (fiche détaillée) au
+  /// tap sur une unité — utilisé par la recherche intelligente pour ouvrir
+  /// l'historique de l'article au lieu de la fiche produit.
+  final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
 
   @override
   State<ProduitGroupCard> createState() => _ProduitGroupCardState();
@@ -92,7 +97,14 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
             ),
           ),
           InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
+            onTap: () {
+              if (widget.onTapUnit != null && group.items.length == 1) {
+                final imageUrl = widget.baseUrl != null ? _groupImageUrl(group, widget.baseUrl!, widget.imagesParDesignation) : null;
+                widget.onTapUnit!(group.items.first, imageUrl);
+                return;
+              }
+              setState(() => _expanded = !_expanded);
+            },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
               child: Column(
@@ -176,6 +188,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           showValiderAction: widget.showValiderAction,
                           onEdit: widget.onEdit,
                           onValider: widget.onValider,
+                          onTapUnit: widget.onTapUnit,
                         )),
                   ],
                 ],
@@ -243,6 +256,7 @@ class _UnitRow extends StatelessWidget {
     this.showValiderAction = false,
     this.onEdit,
     this.onValider,
+    this.onTapUnit,
   });
   final ProduitModel produit;
   final String Function(double) fmt;
@@ -251,19 +265,22 @@ class _UnitRow extends StatelessWidget {
   final bool showValiderAction;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
+  final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
 
   @override
   Widget build(BuildContext context) {
     final resolvedImage = baseUrl != null ? produit.imageUrl(baseUrl!) ?? fallbackImageUrl : null;
 
     return InkWell(
-      onTap: () => showProduitDetailSheet(
-        context,
-        produit: produit,
-        baseUrl: baseUrl,
-        imageUrlOverride: resolvedImage,
-        showPrintQr: true,
-      ),
+      onTap: onTapUnit != null
+          ? () => onTapUnit!(produit, resolvedImage)
+          : () => showProduitDetailSheet(
+                context,
+                produit: produit,
+                baseUrl: baseUrl,
+                imageUrlOverride: resolvedImage,
+                showPrintQr: true,
+              ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(

@@ -21,6 +21,7 @@ dependencies:
   esc_pos_utils_plus: ^2.0.4
   print_bluetooth_thermal: ^1.2.2
   qr_flutter: ^4.1.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -31,8 +32,9 @@ dev_dependencies:
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
   min_sdk_android: 21
   adaptive_icon_background: "#0C8F52"
   adaptive_icon_foreground: "assets/icon/app_icon_fg.png"

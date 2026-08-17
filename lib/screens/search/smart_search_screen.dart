@@ -9,6 +9,7 @@ import '../../models/produit_model.dart';
 import '../../services/produit_service.dart';
 import '../../widgets/inline_field.dart';
 import '../produit/widgets/produit_group_card.dart';
+import 'produit_activites_screen.dart';
 
 /// Recherche intelligente d'articles par désignation, IMEI (1 et 2),
 /// capacité ou numéro de série — s'appuie sur `Produits::search_prod()`
@@ -166,6 +167,9 @@ class _SmartSearchScreenState extends State<SmartSearchScreen> {
         group: groups[i],
         baseUrl: _baseUrl,
         imagesParDesignation: _imagesParDesignation,
+        onTapUnit: (produit, imageUrl) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => ProduitActivitesScreen(produit: produit, imageUrl: imageUrl, baseUrl: _baseUrl)),
+        ),
       ),
     );
   }

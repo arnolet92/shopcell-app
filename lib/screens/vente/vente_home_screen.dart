@@ -11,8 +11,9 @@ import '../../services/produit_service.dart';
 import '../../widgets/inline_field.dart';
 import '../../widgets/produit_image.dart';
 import '../produit/widgets/produit_detail_sheet.dart';
+import 'cart_screen.dart';
 import 'qr_sell_scan_screen.dart';
-import 'widgets/checkout_sheet.dart';
+import 'widgets/quantity_modal.dart';
 
 /// Page par défaut après connexion : écran de vente.
 /// Reprend l'organisation de `Vente/commande_direct` côté web
@@ -115,9 +116,9 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const QrSellScanScreen()));
   }
 
-  Future<void> _openCheckout() async {
+  Future<void> _openCart() async {
     if (_user == null) return;
-    await showCheckoutSheet(context, user: _user!);
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CartScreen(user: _user!, baseUrl: _baseUrl)));
   }
 
   void _openDetail(ProduitModel p, String? imageUrl) {
@@ -126,12 +127,14 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
       produit: p,
       baseUrl: _baseUrl,
       imageUrlOverride: imageUrl,
-      onAddToCart: () => CartService.instance.add(p),
+      onAddToCart: () => _pickQuantityAndAdd(p, imageUrl),
     );
   }
 
-  void _addToCart(ProduitModel p) {
-    CartService.instance.add(p);
+  Future<void> _pickQuantityAndAdd(ProduitModel p, String? imageUrl) async {
+    final qte = await showQuantityModal(context, produit: p, imageUrl: imageUrl);
+    if (qte == null || !mounted) return;
+    CartService.instance.add(p, qte: qte);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(milliseconds: 900),
@@ -187,7 +190,7 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
       floatingActionButton: cart.isEmpty
           ? null
           : FloatingActionButton.extended(
-              onPressed: _openCheckout,
+              onPressed: _openCart,
               backgroundColor: AppColors.accent,
               icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
               label: Text('${cart.count} · ${cart.total.toStringAsFixed(0)} Ar', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
@@ -232,7 +235,7 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
           produit: p,
           imageUrl: imageUrl,
           qty: CartService.instance.qteOf(p.idProduits),
-          onAdd: () => _addToCart(p),
+          onAdd: () => _pickQuantityAndAdd(p, imageUrl),
           onDetail: () => _openDetail(p, imageUrl),
         );
       },

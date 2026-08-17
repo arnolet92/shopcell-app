@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import '../core/api_client.dart';
 import '../models/lookup_model.dart';
+import '../models/payment_split.dart';
 import '../models/personne_model.dart';
+import '../models/produit_activite.dart';
 import '../models/produit_model.dart';
 import '../models/user_model.dart';
 import 'cart_service.dart';
@@ -90,23 +92,24 @@ class VenteService {
         .toList();
   }
 
-  /// "Encaisser" : paiement complet immédiat (`Mob/all_payed`).
+  /// "Encaisser" : paiement complet immédiat (`Mob/all_payed`), avec un ou
+  /// plusieurs modes de paiement (`VenteMob::allpayed()` a été étendu côté
+  /// serveur pour accepter un tableau de paiements plutôt qu'un seul).
   Future<SaleResult> encaisser({
     required List<CartLine> lines,
     required UserModel user,
+    required List<PaymentSplit> paiements,
     PersonneModel? client,
-    String? idTypePaiement,
-    double? sommeDonnee,
   }) async {
     if (lines.isEmpty) return SaleResult(success: false, message: 'Le panier est vide.');
+    if (paiements.isEmpty) return SaleResult(success: false, message: 'Ajoutez au moins un mode de paiement.');
 
     final fields = <String, String>{
       'cart': jsonEncode(_cartPayload(lines)),
       'user': jsonEncode(user.mobPayload),
+      'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
     };
     if (client != null) fields['personne'] = jsonEncode({'id': client.id});
-    if (idTypePaiement != null) fields['id_type_paiement'] = idTypePaiement;
-    if (sommeDonnee != null) fields['somme_donnee'] = sommeDonnee.toStringAsFixed(0);
 
     final data = await ApiClient.instance.post('all_payed', fields: fields);
     if (data is! Map) return SaleResult(success: false, message: 'Réponse du serveur invalide.');
@@ -115,6 +118,14 @@ class VenteService {
       success: !error,
       message: data['msg']?.toString() ?? (error ? 'La vente a échoué.' : 'Vente encaissée avec succès.'),
     );
+  }
+
+  /// Historique d'un article (création, modifications, ventes + facture),
+  /// pour l'écran ouvert depuis la recherche intelligente.
+  Future<ProduitActivites> loadProduitActivites(String idProduits) async {
+    final data = await ApiClient.instance.get('produit_activites', query: {'id_produits': idProduits});
+    if (data is! Map) return ProduitActivites.empty();
+    return ProduitActivites.fromJson(Map<String, dynamic>.from(data));
   }
 
   /// "En attente" : commande enregistrée non payée (`Mob/all_data`), qui

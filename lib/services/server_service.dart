@@ -12,10 +12,17 @@ class ServerService {
   Future<String?> get savedServerUrl => ApiClient.instance.baseUrl;
 
   /// Extrait le lien racine à partir du contenu scanné.
-  /// Le QR web encode typiquement `http://192.168.x.x/shopcell/index.php/Mob/checkQR`.
+  ///
+  /// Le QR web encode `<racine>/Mob/checkQR` — une URL "jolie", SANS
+  /// `/index.php/` (voir `MyQRCODE::getLienForApp()` + `QR::index()` côté
+  /// serveur, qui construisent le lien à partir de `SCRIPT_NAME` sans jamais
+  /// y insérer `index.php`). On strippe donc `/Mob/...` en priorité ; on
+  /// garde le repli `/index.php` au cas où un déploiement différent
+  /// produirait un jour l'ancienne forme.
   String extractRootLink(String scanned) {
     var link = scanned.trim();
     link = link.replaceAll(RegExp(r'/index\.php.*$'), '');
+    link = link.replaceAll(RegExp(r'/Mob/.*$', caseSensitive: false), '');
     link = link.replaceAll(RegExp(r'/+$'), '');
     return link;
   }

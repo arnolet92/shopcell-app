@@ -1,0 +1,56 @@
+workflows:
+  ios-unsigned:
+    name: ShopCell iOS (build seul, sans signature)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Récupérer les dépendances Flutter
+        script: flutter pub get
+      - name: Compiler pour iOS (sans signature)
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/ios/iphoneos/*.app
+
+  # Nécessite d'avoir fait, une fois, dans Codemagic (Teams > Integrations) :
+  # une intégration "App Store Connect API" nommée "codemagic_api_key" ci-dessous
+  # (clé générée sur appstoreconnect.apple.com > Users and Access > Integrations).
+  # Remplacer BUNDLE_ID/APP_STORE_APPLE_ID par les valeurs réelles une fois
+  # l'app créée sur App Store Connect (voir Api Store Connect > App Store Connect > My Apps > App Information > Apple ID).
+  ios-release:
+    name: ShopCell iOS (signé + TestFlight)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: codemagic_api_key
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.shopcell.shopcell
+      vars:
+        APP_STORE_APPLE_ID: 0000000000 # TODO: identifiant numérique Apple de l'app (App Store Connect > App Information)
+    scripts:
+      - name: Récupérer les dépendances Flutter
+        script: flutter pub get
+      - name: Configurer la signature automatique (certificats + profils)
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Compiler et signer l'IPA
+        script: flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
