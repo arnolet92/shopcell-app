@@ -25,9 +25,6 @@ workflows:
       cocoapods: default
       groups:
         - app_store_credentials
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.shopcell.shopcell
       vars:
         APP_STORE_APPLE_ID: 6802244455
         BUNDLE_ID: com.shopcell.shopcell
