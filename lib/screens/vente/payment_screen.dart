@@ -38,6 +38,7 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> {
   final _clientSearchCtrl = TextEditingController();
   final _montantCtrl = TextEditingController();
+  final _referenceCtrl = TextEditingController();
 
   List<PersonneModel> _clients = [];
   PersonneModel? _selectedClient;
@@ -71,6 +72,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void dispose() {
     _clientSearchCtrl.dispose();
     _montantCtrl.dispose();
+    _referenceCtrl.dispose();
     super.dispose();
   }
 
@@ -189,6 +191,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       user: widget.user,
       paiements: splits,
       client: _selectedClient,
+      reference: _referenceCtrl.text,
     );
     if (!mounted) return;
     if (result.success) {
@@ -316,6 +319,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ],
                   ),
               ],
+
+              const SizedBox(height: 16),
+              InlineField(label: 'Référence (si pas de client)', controller: _referenceCtrl, prefixIcon: Icons.tag_rounded),
 
               const SizedBox(height: 22),
               Text('Type de paiement', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),

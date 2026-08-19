@@ -100,6 +100,7 @@ class VenteService {
     required UserModel user,
     required List<PaymentSplit> paiements,
     PersonneModel? client,
+    String? reference,
   }) async {
     if (lines.isEmpty) return SaleResult(success: false, message: 'Le panier est vide.');
     if (paiements.isEmpty) return SaleResult(success: false, message: 'Ajoutez au moins un mode de paiement.');
@@ -110,6 +111,7 @@ class VenteService {
       'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
     };
     if (client != null) fields['personne'] = jsonEncode({'id': client.id});
+    if (reference != null && reference.trim().isNotEmpty) fields['reference'] = reference.trim();
 
     final data = await ApiClient.instance.post('all_payed', fields: fields);
     if (data is! Map) return SaleResult(success: false, message: 'Réponse du serveur invalide.');
