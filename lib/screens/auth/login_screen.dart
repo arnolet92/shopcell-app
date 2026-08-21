@@ -136,14 +136,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     loading: _loading,
                     onPressed: _submit,
                   ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: TextButton(
-                      onPressed: _loading ? null : _changeServer,
-                      child: const Text(
-                        'Changer de serveur',
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
-                      ),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _changeServer,
+                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 18, color: AppColors.accentLight),
+                    label: const Text('Scanner le lien du serveur', style: TextStyle(color: AppColors.accentLight)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.borderAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
                 ],

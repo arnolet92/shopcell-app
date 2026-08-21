@@ -1,7 +1,7 @@
 name: shopcell
 description: "ShopCell — Gestion de boutique premium"
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.12.1
