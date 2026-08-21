@@ -21,6 +21,8 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.point_of_sale_rounded, label: 'Vente'),
   SidebarItemData(icon: Icons.inventory_2_rounded, label: "Gestion d'article"),
   SidebarItemData(icon: Icons.travel_explore_rounded, label: 'Recherche'),
+  SidebarItemData(icon: Icons.swap_horizontal_circle_rounded, label: 'Faire un échange'),
+  SidebarItemData(icon: Icons.account_balance_wallet_rounded, label: 'Les crédits'),
   SidebarItemData(icon: Icons.settings_rounded, label: 'Paramètres'),
 ];
 

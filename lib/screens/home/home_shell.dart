@@ -5,6 +5,8 @@ import '../../core/theme.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
+import '../credit/credit_clients_screen.dart';
+import '../echange/echange_search_screen.dart';
 import '../produit/produit_list_screen.dart';
 import '../search/smart_search_screen.dart';
 import '../settings/printer_settings_screen.dart';
@@ -12,10 +14,12 @@ import '../vente/vente_home_screen.dart';
 import 'widgets/app_sidebar.dart';
 
 const _wideBreakpoint = 760.0;
-// Positions dans sidebarItems : ces deux entrées ouvrent un écran dédié
-// (push) plutôt qu'un onglet persistant de l'IndexedStack.
+// Positions dans sidebarItems : ces entrées ouvrent un écran dédié (push)
+// plutôt qu'un onglet persistant de l'IndexedStack.
 const _rechercheIndex = 2;
-const _parametresIndex = 3;
+const _echangeIndex = 3;
+const _creditIndex = 4;
+const _parametresIndex = 5;
 
 /// Coquille principale post-connexion : sidebar ShopCell + zone de contenu.
 /// Page par défaut = Vente (demandé explicitement), la deuxième entrée
@@ -64,6 +68,18 @@ class _HomeShellState extends State<HomeShell> {
     }
     if (index == _parametresIndex) {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrinterSettingsScreen()));
+      return;
+    }
+    if (index == _echangeIndex) {
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => EchangeSearchScreen(user: _user!)));
+      }
+      return;
+    }
+    if (index == _creditIndex) {
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreditClientsScreen(user: _user!)));
+      }
       return;
     }
     setState(() => _selectedIndex = index);
