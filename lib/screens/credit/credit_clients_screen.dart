@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/credit_service.dart';
 import '../../widgets/inline_field.dart';
 import 'credit_detail_screen.dart';
@@ -44,10 +45,24 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// Réutilise le cache préchargé au démarrage (voir AppDataCache) tant
+  /// qu'aucun rechargement explicite n'est demandé — mêmes principes que
+  /// VenteHomeScreen._load().
+  Future<void> _load({bool forceNetwork = false}) async {
+    if (!forceNetwork) {
+      final cached = AppDataCache.instance.creditClients;
+      if (cached != null) {
+        setState(() {
+          _clients = cached;
+          _loading = false;
+        });
+        return;
+      }
+    }
     setState(() => _loading = true);
     final clients = await CreditService.instance.loadClients();
     if (!mounted) return;
+    AppDataCache.instance.setCreditClients(clients);
     setState(() {
       _clients = clients;
       _loading = false;
@@ -81,7 +96,7 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _load,
+          onRefresh: () => _load(forceNetwork: true),
           color: AppColors.accentLight,
           backgroundColor: AppColors.bgCard,
           child: Padding(

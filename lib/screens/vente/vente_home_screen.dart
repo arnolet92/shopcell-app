@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../models/produit_model.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/auth_service.dart';
 import '../../services/cart_service.dart';
 import '../../services/produit_service.dart';
@@ -68,7 +69,22 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _load() async {
+  /// Réutilise le cache préchargé au démarrage (voir AppDataCache /
+  /// splash_screen.dart) s'il est disponible et qu'aucun rechargement
+  /// explicite n'est demandé (pull-to-refresh, retour après une vente qui a
+  /// invalidé le cache) — évite de refaire l'appel réseau à chaque fois que
+  /// cet écran (page par défaut de l'app) est affiché.
+  Future<void> _load({bool forceNetwork = false}) async {
+    if (!forceNetwork) {
+      final cached = AppDataCache.instance.produits;
+      if (cached != null) {
+        setState(() {
+          _produits = cached;
+          _loading = false;
+        });
+        return;
+      }
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -76,6 +92,7 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
     try {
       final list = await ProduitService.instance.loadArticles();
       if (!mounted) return;
+      AppDataCache.instance.setProduits(list);
       setState(() {
         _produits = list;
         _loading = false;

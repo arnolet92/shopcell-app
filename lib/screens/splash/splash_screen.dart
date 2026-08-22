@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/auth_service.dart';
 import '../../services/server_service.dart';
 import '../../widgets/shopcell_logo.dart';
@@ -36,6 +38,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     // faire attendre l'utilisateur une fois les 7s écoulées.
     final serverUrl = await ServerService.instance.savedServerUrl;
     final user = await AuthService.instance.currentUser;
+
+    // Précharge les pages principales (produits, crédits, factures) en
+    // arrière-plan pendant l'animation, pour que naviguer dessus une fois
+    // connecté ne déclenche plus de chargement réseau à chaque fois — voir
+    // AppDataCache. Volontairement non "await" : ne doit jamais retarder la
+    // navigation (l'écran de destination affiche son propre indicateur de
+    // chargement si le préchargement n'est pas encore terminé).
+    if (serverUrl != null && user != null) {
+      unawaited(AppDataCache.instance.preloadAll());
+    }
 
     await Future.delayed(_splashDuration);
     if (!mounted) return;

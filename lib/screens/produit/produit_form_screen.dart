@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/produit_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/produit_service.dart';
 import '../../widgets/autocomplete_lookup_field.dart';
 import '../../widgets/gradient_button.dart';
@@ -231,6 +232,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
 
     if (!mounted) return;
     if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result.message ?? (_isEdit ? 'Article modifié.' : 'Article créé.'))),

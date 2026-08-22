@@ -23,6 +23,8 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.travel_explore_rounded, label: 'Recherche'),
   SidebarItemData(icon: Icons.swap_horizontal_circle_rounded, label: 'Faire un échange'),
   SidebarItemData(icon: Icons.account_balance_wallet_rounded, label: 'Les crédits'),
+  SidebarItemData(icon: Icons.receipt_long_rounded, label: 'Factures payées'),
+  SidebarItemData(icon: Icons.block_rounded, label: 'Factures annulées'),
   SidebarItemData(icon: Icons.settings_rounded, label: 'Paramètres'),
 ];
 

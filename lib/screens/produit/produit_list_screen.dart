@@ -7,6 +7,7 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/produit_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/produit_service.dart';
 import 'produit_form_screen.dart';
 import 'widgets/produit_filter_bar.dart';
@@ -167,7 +168,10 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
     );
-    if (result.success) _reload();
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
   }
 
   @override

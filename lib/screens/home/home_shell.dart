@@ -7,6 +7,7 @@ import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import '../credit/credit_clients_screen.dart';
 import '../echange/echange_search_screen.dart';
+import '../facture/facture_list_screen.dart';
 import '../produit/produit_list_screen.dart';
 import '../search/smart_search_screen.dart';
 import '../settings/printer_settings_screen.dart';
@@ -19,7 +20,9 @@ const _wideBreakpoint = 760.0;
 const _rechercheIndex = 2;
 const _echangeIndex = 3;
 const _creditIndex = 4;
-const _parametresIndex = 5;
+const _facturesPayeesIndex = 5;
+const _facturesAnnuleesIndex = 6;
+const _parametresIndex = 7;
 
 /// Coquille principale post-connexion : sidebar ShopCell + zone de contenu.
 /// Page par défaut = Vente (demandé explicitement), la deuxième entrée
@@ -80,6 +83,14 @@ class _HomeShellState extends State<HomeShell> {
       if (_user != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreditClientsScreen(user: _user!)));
       }
+      return;
+    }
+    if (index == _facturesPayeesIndex) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FactureListScreen(mode: FactureListMode.payee)));
+      return;
+    }
+    if (index == _facturesAnnuleesIndex) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FactureListScreen(mode: FactureListMode.annulee)));
       return;
     }
     setState(() => _selectedIndex = index);

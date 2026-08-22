@@ -6,6 +6,7 @@ import '../../models/lookup_model.dart';
 import '../../models/payment_split.dart';
 import '../../models/personne_model.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/cart_service.dart';
 import '../../services/printer_service.dart';
 import '../../services/ticket_builder.dart';
@@ -195,6 +196,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
     if (!mounted) return;
     if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
       final lines = List<CartLine>.from(CartService.instance.lines);
       final printMessage = await _printReceipt(lines: lines, splits: splits);
       if (!mounted) return;

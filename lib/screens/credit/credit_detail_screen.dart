@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/credit_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
@@ -115,6 +116,8 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
     if (!mounted) return;
     if (result.success) {
       _changed = true;
+      AppDataCache.instance.invalidate(CacheDomain.creditClients);
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message ?? 'Paiement enregistré avec succès.')));
       await _load();
       if (mounted) setState(() => _submitting = false);

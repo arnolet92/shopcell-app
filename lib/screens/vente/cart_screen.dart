@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../models/personne_model.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/cart_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
@@ -297,6 +298,7 @@ class _EnAttenteSheetState extends State<_EnAttenteSheet> {
     );
     if (!mounted) return;
     if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
       CartService.instance.clear();
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message ?? 'Commande mise en attente.')));
