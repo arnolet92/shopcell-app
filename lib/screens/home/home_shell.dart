@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
+import '../../models/facture_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
@@ -86,11 +87,15 @@ class _HomeShellState extends State<HomeShell> {
       return;
     }
     if (index == _facturesPayeesIndex) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FactureListScreen(mode: FactureListMode.payee)));
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => FactureListScreen(mode: FactureListMode.payee, user: _user!)));
+      }
       return;
     }
     if (index == _facturesAnnuleesIndex) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FactureListScreen(mode: FactureListMode.annulee)));
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => FactureListScreen(mode: FactureListMode.annulee, user: _user!)));
+      }
       return;
     }
     setState(() => _selectedIndex = index);

@@ -34,4 +34,22 @@ class FactureService {
     if (data is! Map) return FactureDetail.empty();
     return FactureDetail.fromJson(Map<String, dynamic>.from(data));
   }
+
+  /// Miroir mobile de `Vente/cancel_addition` — réservé patron/gerant
+  /// (revalidé côté serveur, voir Mob::cancel_addition()).
+  Future<FactureActionResult> cancelArticle({required String idVentes, required String role}) async {
+    final data = await ApiClient.instance.post('cancel_addition', fields: {
+      'id_ventes': idVentes,
+      'role': role,
+    });
+    if (data is! Map) return FactureActionResult(success: false, message: 'Réponse du serveur invalide.');
+    final success = data['success'] == true;
+    return FactureActionResult(success: success, message: data['message']?.toString());
+  }
+}
+
+class FactureActionResult {
+  FactureActionResult({required this.success, this.message});
+  final bool success;
+  final String? message;
 }

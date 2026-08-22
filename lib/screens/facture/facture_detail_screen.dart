@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
 import '../../models/facture_model.dart';
+import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
 
 String _fmt(double v) {
@@ -18,13 +20,21 @@ String _fmt(double v) {
 /// Détail d'une facture (payée ou annulée) : articles actifs/offerts/
 /// annulés + paiements + totaux — miroir mobile de `_facture_detail_row.php`
 /// / `_facture_detail_row_cancel.php` côté web (le panneau "Plus
-/// d'information"). Aucune action d'annulation ici : le mobile n'a pas de
-/// fonctionnalité d'annulation d'article, ce détail est en lecture seule
-/// pour les deux modes (payée / annulée) — pas besoin de dupliquer l'écran.
+/// d'information"). En mode payée, patron/gerant peuvent annuler une ligne
+/// active/offerte (bouton "Annuler" de `_facture_detail_row.php`) ; le mode
+/// annulée reste en lecture seule, comme côté web.
 class FactureDetailScreen extends StatefulWidget {
-  const FactureDetailScreen({super.key, required this.idClient, required this.numeroFacture});
+  const FactureDetailScreen({
+    super.key,
+    required this.idClient,
+    required this.numeroFacture,
+    required this.mode,
+    required this.user,
+  });
   final String idClient;
   final String numeroFacture;
+  final FactureListMode mode;
+  final UserModel user;
 
   @override
   State<FactureDetailScreen> createState() => _FactureDetailScreenState();
@@ -34,6 +44,12 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
   FactureDetail? _detail;
   bool _loading = true;
   String? _error;
+  bool _changed = false;
+
+  bool get _peutAnnuler =>
+      widget.mode == FactureListMode.payee && (widget.user.role == 'patron' || widget.user.role == 'gerant');
+
+  String? _cancellingIdVentes;
 
   @override
   void initState() {
@@ -62,47 +78,88 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     }
   }
 
+  Future<void> _confirmCancel(FactureDetailArticle article) async {
+    final idVentes = article.idVentes;
+    if (idVentes == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Annuler cet article ?', style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(
+          'Voulez-vous vraiment annuler "${article.designation}" ?',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Non')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Annuler l\'article', style: TextStyle(color: AppColors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _cancellingIdVentes = idVentes);
+    final result = await FactureService.instance.cancelArticle(idVentes: idVentes, role: widget.user.role);
+    if (!mounted) return;
+    setState(() => _cancellingIdVentes = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article annulé.' : 'Échec de l\'annulation.'))),
+    );
+    if (result.success) {
+      _changed = true;
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgDeep,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgCard,
-        elevation: 0,
-        title: Text(widget.numeroFacture, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
-      ),
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight))
-            : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(_error!, textAlign: TextAlign.center, style: GoogleFonts.inter(color: AppColors.red, fontSize: 13)),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pop(_changed);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.bgDeep,
+        appBar: AppBar(
+          backgroundColor: AppColors.bgCard,
+          elevation: 0,
+          title: Text(widget.numeroFacture, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
+        ),
+        body: SafeArea(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight))
+              : _error != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(_error!, textAlign: TextAlign.center, style: GoogleFonts.inter(color: AppColors.red, fontSize: 13)),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      color: AppColors.accentLight,
+                      backgroundColor: AppColors.bgCard,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                        children: [
+                          if (_detail!.actifs.isNotEmpty) ..._section('Articles', Icons.inventory_2_rounded, AppColors.accentLight, _detail!.actifs),
+                          if (_detail!.offerts.isNotEmpty) ..._section('Articles offerts', Icons.card_giftcard_rounded, AppColors.green, _detail!.offerts),
+                          if (_detail!.annules.isNotEmpty) ..._section('Articles annulés', Icons.block_rounded, AppColors.red, _detail!.annules),
+                          if (_detail!.actifs.isEmpty && _detail!.offerts.isEmpty && _detail!.annules.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Center(child: Text('Aucun article', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
+                            ),
+                          const SizedBox(height: 8),
+                          _paiementsSection(),
+                          const SizedBox(height: 16),
+                          _totauxCard(),
+                        ],
+                      ),
                     ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    color: AppColors.accentLight,
-                    backgroundColor: AppColors.bgCard,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                      children: [
-                        if (_detail!.actifs.isNotEmpty) ..._section('Articles', Icons.inventory_2_rounded, AppColors.accentLight, _detail!.actifs),
-                        if (_detail!.offerts.isNotEmpty) ..._section('Articles offerts', Icons.card_giftcard_rounded, AppColors.green, _detail!.offerts),
-                        if (_detail!.annules.isNotEmpty) ..._section('Articles annulés', Icons.block_rounded, AppColors.red, _detail!.annules),
-                        if (_detail!.actifs.isEmpty && _detail!.offerts.isEmpty && _detail!.annules.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('Aucun article', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
-                          ),
-                        const SizedBox(height: 8),
-                        _paiementsSection(),
-                        const SizedBox(height: 16),
-                        _totauxCard(),
-                      ],
-                    ),
-                  ),
+        ),
       ),
     );
   }
@@ -115,7 +172,11 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
         Text(title.toUpperCase(), style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: color, letterSpacing: .04)),
       ]),
       const SizedBox(height: 10),
-      ...list.map((a) => _ArticleCard(article: a)),
+      ...list.map((a) => _ArticleCard(
+            article: a,
+            onCancel: _peutAnnuler && a.idVentes != null ? () => _confirmCancel(a) : null,
+            cancelling: _cancellingIdVentes != null && _cancellingIdVentes == a.idVentes,
+          )),
       const SizedBox(height: 16),
     ];
   }
@@ -178,8 +239,10 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
 }
 
 class _ArticleCard extends StatelessWidget {
-  const _ArticleCard({required this.article});
+  const _ArticleCard({required this.article, this.onCancel, this.cancelling = false});
   final FactureDetailArticle article;
+  final VoidCallback? onCancel;
+  final bool cancelling;
 
   @override
   Widget build(BuildContext context) {
@@ -239,6 +302,20 @@ class _ArticleCard extends StatelessWidget {
               Text('PU : ${_fmt(article.prixUnitaire ?? 0)}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
               Text(_fmt(article.montant ?? 0), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
             ]),
+          if (onCancel != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: cancelling
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.red))
+                  : TextButton.icon(
+                      onPressed: onCancel,
+                      icon: const Icon(Icons.block_rounded, size: 15, color: AppColors.red),
+                      label: Text('Annuler', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.red)),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
+            ),
+          ],
         ],
       ),
     );

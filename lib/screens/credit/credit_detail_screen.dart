@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
+import '../../models/facture_model.dart';
 import '../../models/lookup_model.dart';
 import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/credit_service.dart';
+import '../../services/facture_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
@@ -218,30 +220,112 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
   }
 
   Widget _factureTile(CreditFacture f) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(f.numeroFacture ?? 'Facture', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                if (f.dateVentes != null)
-                  Text(f.dateVentes!, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _showFactureDetail(f),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
+          child: Row(
             children: [
-              Text('${f.montant.toStringAsFixed(0)} Ar', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
-              Text('Reste ${_fmt(f.restant)}', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.orange)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(f.numeroFacture ?? 'Facture', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    if (f.dateVentes != null)
+                      Text(f.dateVentes!, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('${f.montant.toStringAsFixed(0)} Ar', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                  Text('Reste ${_fmt(f.restant)}', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.orange)),
+                ],
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 18),
             ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  /// Détail des articles de la facture avant paiement — le web n'affiche
+  /// que des totaux ici (`layout_payementcredit_tab.php`), on va plus loin
+  /// côté mobile en réutilisant `Mob/facture_detail` (même endpoint que
+  /// l'écran "Factures payées").
+  void _showFactureDetail(CreditFacture f) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => FutureBuilder<FactureDetail>(
+          future: FactureService.instance.loadDetail(f.idClient),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight));
+            }
+            final detail = snapshot.data!;
+            final articles = [...detail.actifs, ...detail.offerts];
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              children: [
+                Center(
+                  child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+                ),
+                const SizedBox(height: 16),
+                Text(f.numeroFacture ?? 'Facture', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                const SizedBox(height: 4),
+                Text('Total ${_fmt(detail.totalWithRemise)} · Reste ${_fmt(f.restant)}',
+                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+                const SizedBox(height: 16),
+                if (articles.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: Text('Aucun article', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
+                  )
+                else
+                  ...articles.map((a) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(a.designation, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                  if (a.numSerie != null)
+                                    Text('N° série: ${a.numSerie}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                                ],
+                              ),
+                            ),
+                            Text('x${a.qte.toStringAsFixed(a.qte == a.qte.roundToDouble() ? 0 : 2)}',
+                                style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                            const SizedBox(width: 10),
+                            Text(_fmt(a.montant ?? 0), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
+                          ],
+                        ),
+                      )),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

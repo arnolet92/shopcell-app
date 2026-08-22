@@ -1,3 +1,5 @@
+enum FactureListMode { payee, annulee }
+
 double _d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
 String? _s(dynamic v) {
   final t = v?.toString().trim();
@@ -85,6 +87,7 @@ class FactureDetailArticle {
     this.montant,
     this.motif,
     this.dateAnnulation,
+    this.idVentes,
   });
 
   final String designation;
@@ -99,6 +102,10 @@ class FactureDetailArticle {
   final double? montant;
   final String? motif;
   final String? dateAnnulation;
+  /// Présent uniquement pour les lignes actives/offertes — nécessaire pour
+  /// l'action d'annulation (`Mob/cancel_addition`, miroir de
+  /// `Vente/cancel_addition`).
+  final String? idVentes;
 
   factory FactureDetailArticle.fromActifJson(Map<String, dynamic> j) => FactureDetailArticle(
         designation: _s(j['designation_unite']) ?? _s(j['designation_produits']) ?? 'Article',
@@ -111,6 +118,7 @@ class FactureDetailArticle {
         accompagnement: _s(j['accompagnement']),
         prixUnitaire: _d(j['prix_ventes']),
         montant: _d(j['total_recette']),
+        idVentes: _s(j['id_ventes']),
       );
 
   factory FactureDetailArticle.fromAnnuleJson(Map<String, dynamic> j) => FactureDetailArticle(

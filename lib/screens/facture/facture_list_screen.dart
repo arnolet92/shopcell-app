@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
 import '../../models/facture_model.dart';
+import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
 import '../../widgets/inline_field.dart';
@@ -26,8 +27,6 @@ String _fmtDate(String? iso) {
   return '${p2(dt.day)}/${p2(dt.month)}/${dt.year} ${p2(dt.hour)}:${p2(dt.minute)}';
 }
 
-enum FactureListMode { payee, annulee }
-
 /// Liste des factures payées OU annulées — un seul écran paramétré par
 /// [mode] plutôt que deux écrans quasi identiques : même mise en page en
 /// cartes, même recherche/filtre par date que côté web
@@ -36,8 +35,9 @@ enum FactureListMode { payee, annulee }
 /// de la colonne date (paiement vs annulation) — le mobile n'a de toute
 /// façon pas de bouton "Annuler" à masquer, contrairement à la version web.
 class FactureListScreen extends StatefulWidget {
-  const FactureListScreen({super.key, required this.mode});
+  const FactureListScreen({super.key, required this.mode, required this.user});
   final FactureListMode mode;
+  final UserModel user;
 
   @override
   State<FactureListScreen> createState() => _FactureListScreenState();
@@ -145,10 +145,11 @@ class _FactureListScreenState extends State<FactureListScreen> {
     _search();
   }
 
-  void _openDetail(FactureListItem item) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => FactureDetailScreen(idClient: item.idClient, numeroFacture: item.numeroFacture),
+  Future<void> _openDetail(FactureListItem item) async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => FactureDetailScreen(idClient: item.idClient, numeroFacture: item.numeroFacture, mode: widget.mode, user: widget.user),
     ));
+    if (changed == true) _search();
   }
 
   @override
