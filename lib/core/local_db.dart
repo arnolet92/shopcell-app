@@ -19,6 +19,7 @@ class LocalDb {
 
   static const keyServerUrl = 'server_url';
   static const keyPrinterConfig = 'printer_config';
+  static const keyA4PrinterEnabled = 'a4_printer_enabled';
 
   Database? _db;
 

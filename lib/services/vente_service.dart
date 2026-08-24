@@ -10,9 +10,12 @@ import '../models/user_model.dart';
 import 'cart_service.dart';
 
 class SaleResult {
-  SaleResult({required this.success, this.message});
+  SaleResult({required this.success, this.message, this.idClient, this.numeroFacture, this.dateFacture});
   final bool success;
   final String? message;
+  final String? idClient;
+  final String? numeroFacture;
+  final String? dateFacture;
 }
 
 /// Orchestration de la vente côté mobile, sur le même principe que l'écran
@@ -46,6 +49,7 @@ class VenteService {
       'rcs': field('rcs'),
       'telephone': field('telephone'),
       'email': field('email'),
+      'logo': field('logo'),
     };
   }
 
@@ -119,6 +123,9 @@ class VenteService {
     return SaleResult(
       success: !error,
       message: data['msg']?.toString() ?? (error ? 'La vente a échoué.' : 'Vente encaissée avec succès.'),
+      idClient: data['id_cmd']?.toString(),
+      numeroFacture: data['numero_facture']?.toString(),
+      dateFacture: data['date_facture']?.toString(),
     );
   }
 

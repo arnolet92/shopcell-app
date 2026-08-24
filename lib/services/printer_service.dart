@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:pdf/widgets.dart' as pw;
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:printing/printing.dart';
 
 import '../core/local_db.dart';
 import '../models/printer_config.dart';
@@ -41,6 +44,37 @@ class PrinterService {
 
   Future<List<BluetoothInfo>> pairedBluetoothPrinters() async {
     return PrintBluetoothThermal.pairedBluetooths;
+  }
+
+  // ---- Imprimante A4 (système Android, ex: Canon G3800) ----
+
+  bool? _a4Enabled;
+
+  Future<bool> get isA4Enabled async {
+    if (_a4Enabled != null) return _a4Enabled!;
+    final raw = await LocalDb.instance.getConfig(LocalDb.keyA4PrinterEnabled);
+    _a4Enabled = raw == '1';
+    return _a4Enabled!;
+  }
+
+  Future<void> setA4Enabled(bool enabled) async {
+    _a4Enabled = enabled;
+    await LocalDb.instance.setConfig(LocalDb.keyA4PrinterEnabled, enabled ? '1' : '0');
+  }
+
+  /// Ouvre le système d'impression Android (sélection d'imprimante réseau/
+  /// Mopria, ex: Canon G3800) avec le PDF donné.
+  Future<PrintResult> printPdf(pw.Document doc, {String docName = 'Ticket'}) async {
+    try {
+      final bytes = await doc.save();
+      final ok = await Printing.layoutPdf(
+        onLayout: (_) async => Uint8List.fromList(bytes),
+        name: docName,
+      );
+      return PrintResult(success: ok, message: ok ? null : 'Impression annulée.');
+    } catch (e) {
+      return PrintResult(success: false, message: "Impression A4 impossible : $e");
+    }
   }
 
   Future<PrintResult> printBytes(List<int> bytes) async {

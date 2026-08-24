@@ -5,6 +5,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/theme.dart';
 import '../../models/printer_config.dart';
+import '../../services/pdf_ticket_builder.dart';
 import '../../services/printer_service.dart';
 import '../../services/ticket_builder.dart';
 import '../../widgets/gradient_button.dart';
@@ -33,10 +34,16 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   String? _message;
   bool _messageIsError = false;
 
+  bool _a4Enabled = false;
+  bool _testingA4 = false;
+  String? _a4Message;
+  bool _a4MessageIsError = false;
+
   @override
   void initState() {
     super.initState();
     _loadCurrent();
+    _loadA4();
   }
 
   @override
@@ -139,6 +146,38 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     });
   }
 
+  Future<void> _loadA4() async {
+    final enabled = await PrinterService.instance.isA4Enabled;
+    if (!mounted) return;
+    setState(() => _a4Enabled = enabled);
+  }
+
+  Future<void> _toggleA4(bool value) async {
+    setState(() => _a4Enabled = value);
+    await PrinterService.instance.setA4Enabled(value);
+  }
+
+  Future<void> _testPrintA4() async {
+    setState(() {
+      _testingA4 = true;
+      _a4Message = null;
+    });
+    final doc = await PdfTicketBuilder.buildSaleReceiptA4(
+      shopName: 'ShopCell',
+      numeroFacture: 'TEST-0001',
+      clientNom: 'Client de test',
+      lines: const [],
+      total: 0,
+    );
+    final result = await PrinterService.instance.printPdf(doc, docName: 'Test A4');
+    if (!mounted) return;
+    setState(() {
+      _testingA4 = false;
+      _a4Message = result.success ? 'Document envoyé à l\'imprimante.' : result.message;
+      _a4MessageIsError = !result.success;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -223,6 +262,53 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight))
                     : const Icon(Icons.print_rounded, size: 18, color: AppColors.accentLight),
                 label: const Text('Imprimer un ticket de test', style: TextStyle(color: AppColors.accentLight)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.borderAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Divider(color: AppColors.border),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.description_rounded, size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                Text('Imprimante A4 (feuille)', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14.5, color: AppColors.textPrimary)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "Pour une imprimante classique (jet d'encre/laser, ex: Canon G3800), pas une imprimante ticket. "
+              "L'impression passe par le système Android : vérifiez qu'un service d'impression (Mopria, ou l'app du fabricant) est installé et que l'imprimante est sur le même réseau WiFi.",
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Proposer l\'impression A4 après une vente', style: GoogleFonts.inter(fontSize: 13, color: AppColors.textPrimary)),
+                value: _a4Enabled,
+                activeThumbColor: AppColors.accent,
+                onChanged: _toggleA4,
+              ),
+            ),
+            if (_a4Message != null) ...[
+              const SizedBox(height: 8),
+              Text(_a4Message!, style: TextStyle(color: _a4MessageIsError ? AppColors.red : AppColors.green, fontSize: 13)),
+            ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _testingA4 ? null : _testPrintA4,
+                icon: _testingA4
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight))
+                    : const Icon(Icons.print_rounded, size: 18, color: AppColors.accentLight),
+                label: const Text('Imprimer un document A4 de test', style: TextStyle(color: AppColors.accentLight)),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.borderAccent),
                   padding: const EdgeInsets.symmetric(vertical: 14),
