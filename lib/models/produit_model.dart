@@ -30,6 +30,9 @@ class ProduitModel {
     required this.nomSysteme,
     required this.nomSousType,
     required this.imgProduit,
+    this.isReparationProduits = false,
+    this.motifReparationProduits,
+    this.isRepareeProduits = false,
   });
 
   final String idProduits;
@@ -56,6 +59,9 @@ class ProduitModel {
   final String? nomSysteme; // "Système"
   final String? nomSousType; // Famille
   final String? imgProduit;
+  final bool isReparationProduits; // actuellement en réparation
+  final String? motifReparationProduits;
+  final bool isRepareeProduits; // a déjà été réparé (historique)
 
   /// URL réelle de la photo, sur le même principe que
   /// `Media::get_url_file($id, $img, 'photo', 'produit', false)` côté web :
@@ -104,6 +110,9 @@ class ProduitModel {
       nomSysteme: _s(json['nom_systeme']),
       nomSousType: _s(json['nom_sous_type']),
       imgProduit: _s(json['img_produit']),
+      isReparationProduits: _d(json['isreparation_produits']) == 1,
+      motifReparationProduits: _s(json['motif_reparation_produits']),
+      isRepareeProduits: _d(json['isreparee_produits']) == 1,
     );
   }
 

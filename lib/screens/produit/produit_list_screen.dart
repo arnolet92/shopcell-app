@@ -174,6 +174,64 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     }
   }
 
+  Future<String?> _promptMotif({required String title, required String confirmLabel, String? initial}) {
+    final controller = TextEditingController(text: initial ?? '');
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: Text(title, style: GoogleFonts.inter(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Défaut / motif...',
+            hintStyle: const TextStyle(color: AppColors.textMuted),
+            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.borderAccent), borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(confirmLabel, style: const TextStyle(color: AppColors.accentLight, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _miseEnReparation(ProduitModel p) async {
+    final motif = await _promptMotif(title: 'Mise en réparation', confirmLabel: 'Mettre en réparation', initial: p.motifReparationProduits);
+    if (motif == null || !mounted) return;
+    final result = await ProduitService.instance.miseEnReparation(idProduits: p.idProduits, motif: motif);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
+  Future<void> _terminerReparation(ProduitModel p) async {
+    final motif = await _promptMotif(title: 'Terminer la réparation', confirmLabel: 'Enregistrer', initial: p.motifReparationProduits);
+    if (motif == null || !mounted) return;
+    final result = await ProduitService.instance.terminerReparation(idProduits: p.idProduits, motif: motif);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = ProduitGroup.groupBy(_produits);
@@ -261,6 +319,8 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     showValiderAction: _vue == ProduitVue.attente,
                     onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
                     onValider: (p) => _valider(p, true),
+                    onMiseEnReparation: _miseEnReparation,
+                    onTerminerReparation: _terminerReparation,
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
@@ -308,6 +368,7 @@ class _VueTabs extends StatelessWidget {
           chip(ProduitVue.tous, "Gestion d'article", Icons.list_rounded),
           chip(ProduitVue.attente, 'En attente', Icons.access_time_rounded),
           chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
+          chip(ProduitVue.reparation, 'Article en réparation', Icons.build_rounded),
         ],
       ),
     );

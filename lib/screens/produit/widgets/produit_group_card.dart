@@ -32,6 +32,8 @@ class ProduitGroupCard extends StatefulWidget {
     this.showValiderAction = false,
     this.onEdit,
     this.onValider,
+    this.onMiseEnReparation,
+    this.onTerminerReparation,
     this.onTapUnit,
   });
 
@@ -41,6 +43,8 @@ class ProduitGroupCard extends StatefulWidget {
   final bool showValiderAction;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
+  final void Function(ProduitModel produit)? onMiseEnReparation;
+  final void Function(ProduitModel produit)? onTerminerReparation;
   /// Si renseigné, remplace le comportement par défaut (fiche détaillée) au
   /// tap sur une unité — utilisé par la recherche intelligente pour ouvrir
   /// l'historique de l'article au lieu de la fiche produit.
@@ -188,6 +192,8 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           showValiderAction: widget.showValiderAction,
                           onEdit: widget.onEdit,
                           onValider: widget.onValider,
+                          onMiseEnReparation: widget.onMiseEnReparation,
+                          onTerminerReparation: widget.onTerminerReparation,
                           onTapUnit: widget.onTapUnit,
                         )),
                   ],
@@ -256,6 +262,8 @@ class _UnitRow extends StatelessWidget {
     this.showValiderAction = false,
     this.onEdit,
     this.onValider,
+    this.onMiseEnReparation,
+    this.onTerminerReparation,
     this.onTapUnit,
   });
   final ProduitModel produit;
@@ -265,6 +273,8 @@ class _UnitRow extends StatelessWidget {
   final bool showValiderAction;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
+  final void Function(ProduitModel produit)? onMiseEnReparation;
+  final void Function(ProduitModel produit)? onTerminerReparation;
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
 
   @override
@@ -283,37 +293,70 @@ class _UnitRow extends StatelessWidget {
               ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: AppColors.textMuted),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                produit.numSerie ?? produit.codeProduits ?? 'Réf. ${produit.idProduits}',
-                style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary),
-                overflow: TextOverflow.ellipsis,
-              ),
+            Row(
+              children: [
+                const Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: AppColors.textMuted),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    produit.numSerie ?? produit.codeProduits ?? 'Réf. ${produit.idProduits}',
+                    style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (produit.isReparationProduits)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.build_circle_rounded, size: 14, color: AppColors.orange),
+                  ),
+                Text(
+                  '${fmt(produit.prixUnitaire)} Ar',
+                  style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                if (showValiderAction && onValider != null)
+                  IconButton(
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.green),
+                    tooltip: 'Valider',
+                    onPressed: () => onValider!(produit),
+                  )
+                else ...[
+                  if (onMiseEnReparation != null || onTerminerReparation != null)
+                    IconButton(
+                      icon: Icon(
+                        produit.isReparationProduits ? Icons.build_circle_rounded : Icons.build_outlined,
+                        size: 17,
+                        color: produit.isReparationProduits ? AppColors.orange : AppColors.textMuted,
+                      ),
+                      tooltip: produit.isReparationProduits ? 'Terminer la réparation' : 'Mise en réparation',
+                      onPressed: produit.isReparationProduits
+                          ? (onTerminerReparation != null ? () => onTerminerReparation!(produit) : null)
+                          : (onMiseEnReparation != null ? () => onMiseEnReparation!(produit) : null),
+                    ),
+                  if (onEdit != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_rounded, size: 16, color: AppColors.textMuted),
+                      tooltip: 'Modifier',
+                      onPressed: () => onEdit!(produit, resolvedImage),
+                    )
+                  else if (onMiseEnReparation == null && onTerminerReparation == null)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 6),
+                      child: Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
+                    ),
+                ],
+              ],
             ),
-            Text(
-              '${fmt(produit.prixUnitaire)} Ar',
-              style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-            ),
-            if (showValiderAction && onValider != null)
-              IconButton(
-                icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.green),
-                tooltip: 'Valider',
-                onPressed: () => onValider!(produit),
-              )
-            else if (onEdit != null)
-              IconButton(
-                icon: const Icon(Icons.edit_rounded, size: 16, color: AppColors.textMuted),
-                tooltip: 'Modifier',
-                onPressed: () => onEdit!(produit, resolvedImage),
-              )
-            else
-              const Padding(
-                padding: EdgeInsets.only(left: 6),
-                child: Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
+            if (produit.isReparationProduits && (produit.motifReparationProduits ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text(
+                  'Motif : ${produit.motifReparationProduits}',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.orange, fontStyle: FontStyle.italic),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
           ],
         ),

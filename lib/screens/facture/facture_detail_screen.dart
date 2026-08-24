@@ -81,25 +81,22 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
   Future<void> _confirmCancel(FactureDetailArticle article) async {
     final idVentes = article.idVentes;
     if (idVentes == null) return;
-    final ok = await showDialog<bool>(
+    final result0 = await showModalBottomSheet<_CancelArticleResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
-        title: const Text('Annuler cet article ?', style: TextStyle(color: AppColors.textPrimary)),
-        content: Text(
-          'Voulez-vous vraiment annuler "${article.designation}" ?',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Non')),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Annuler l\'article', style: TextStyle(color: AppColors.red))),
-        ],
-      ),
+      backgroundColor: AppColors.bgCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (context) => _CancelArticleSheet(designation: article.designation),
     );
-    if (ok != true) return;
+    if (result0 == null) return;
 
     setState(() => _cancellingIdVentes = idVentes);
-    final result = await FactureService.instance.cancelArticle(idVentes: idVentes, role: widget.user.role);
+    final result = await FactureService.instance.cancelArticle(
+      idVentes: idVentes,
+      role: widget.user.role,
+      motif: result0.motif,
+      mettreEnReparation: result0.mettreEnReparation,
+    );
     if (!mounted) return;
     setState(() => _cancellingIdVentes = null);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -295,7 +292,7 @@ class _ArticleCard extends StatelessWidget {
           ],
           const SizedBox(height: 8),
           if (estAnnule) ...[
-            if (article.motif != null) Text('Motif : ${article.motif}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.red)),
+            if (article.motif != null) Text('Défaut : ${article.motif}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.red)),
             if (article.dateAnnulation != null) Text('Annulé le ${article.dateAnnulation}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
           ] else
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -316,6 +313,109 @@ class _ArticleCard extends StatelessWidget {
                     ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CancelArticleResult {
+  _CancelArticleResult({required this.motif, required this.mettreEnReparation});
+  final String motif;
+  final bool mettreEnReparation;
+}
+
+/// Modal affiché avant l'annulation d'un article — miroir mobile de
+/// `Vente/annuler_article_modal` côté web : champ Défaut + interrupteur
+/// "Mettre en réparation" + bouton "Valider l'annulation".
+class _CancelArticleSheet extends StatefulWidget {
+  const _CancelArticleSheet({required this.designation});
+  final String designation;
+
+  @override
+  State<_CancelArticleSheet> createState() => _CancelArticleSheetState();
+}
+
+class _CancelArticleSheetState extends State<_CancelArticleSheet> {
+  final _motifController = TextEditingController();
+  bool _mettreEnReparation = false;
+
+  @override
+  void dispose() {
+    _motifController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Annuler "${widget.designation}"',
+            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 16),
+          Text('Défaut', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _motifController,
+            autofocus: true,
+            maxLines: 3,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: "Décrire le défaut / la raison de l'annulation...",
+              hintStyle: const TextStyle(color: AppColors.textMuted),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.borderAccent), borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(10)),
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text("Mettre l'article en réparation", style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              value: _mettreEnReparation,
+              activeThumbColor: AppColors.orange,
+              onChanged: (v) => setState(() => _mettreEnReparation = v),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(
+                _CancelArticleResult(motif: _motifController.text, mettreEnReparation: _mettreEnReparation),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.red,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Valider l'annulation", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+          ),
         ],
       ),
     );

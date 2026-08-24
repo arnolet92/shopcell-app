@@ -2,10 +2,11 @@ import '../core/api_client.dart';
 import '../models/lookup_model.dart';
 import '../models/produit_model.dart';
 
-/// Les 3 vues de la gestion d'article côté web : `Produit::lst()` (tous),
+/// Les 4 vues de la gestion d'article côté web : `Produit::lst()` (tous),
 /// `Produit::lst_attente()` (articles en attente de validation),
-/// `Produit::lst_vente()` (articles totalement épuisés).
-enum ProduitVue { tous, attente, vente }
+/// `Produit::lst_vente()` (articles totalement épuisés),
+/// `Produit::lst_reparation()` (articles actuellement en réparation).
+enum ProduitVue { tous, attente, vente, reparation }
 
 class SaveProduitResult {
   SaveProduitResult({required this.success, this.message, this.idProduits});
@@ -38,7 +39,12 @@ class ProduitService {
     String? idDefaut,
   }) async {
     final fields = <String, String>{
-      'vue': switch (vue) { ProduitVue.tous => 'tous', ProduitVue.attente => 'attente', ProduitVue.vente => 'vente' },
+      'vue': switch (vue) {
+        ProduitVue.tous => 'tous',
+        ProduitVue.attente => 'attente',
+        ProduitVue.vente => 'vente',
+        ProduitVue.reparation => 'reparation',
+      },
     };
     if (recherche != null && recherche.trim().isNotEmpty) fields['arg'] = recherche.trim();
     if (idFamille != null && idFamille.isNotEmpty) fields['id_sous_type_produit'] = idFamille;
@@ -168,6 +174,28 @@ class ProduitService {
     final data = await ApiClient.instance.post('valider_attente', fields: {
       'id_produits': idProduits,
       'valide': valider ? '1' : '0',
+    });
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Met un article en réparation — équivalent de `Produit::save_mise_en_reparation()`.
+  Future<SaveProduitResult> miseEnReparation({required String idProduits, required String motif}) async {
+    final data = await ApiClient.instance.post('mise_en_reparation', fields: {
+      'id_produits': idProduits,
+      'motif': motif,
+    });
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Termine la réparation d'un article — équivalent de `Produit::save_terminer_reparation()`.
+  Future<SaveProduitResult> terminerReparation({required String idProduits, required String motif}) async {
+    final data = await ApiClient.instance.post('terminer_reparation', fields: {
+      'id_produits': idProduits,
+      'motif': motif,
     });
     if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
     final error = data['error'] == true;

@@ -92,6 +92,32 @@ class _ProduitDetailContent extends StatelessWidget {
                 style: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 4),
+              if (produit.isReparationProduits) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.orange.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.orange.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.build_circle_rounded, size: 14, color: AppColors.orange),
+                        const SizedBox(width: 6),
+                        Text(
+                          (produit.motifReparationProduits ?? '').trim().isNotEmpty
+                              ? 'En réparation : ${produit.motifReparationProduits}'
+                              : 'En réparation',
+                          style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.orange),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               if (produit.codeProduits != null || produit.numSerie != null)
                 Center(
                   child: Text(

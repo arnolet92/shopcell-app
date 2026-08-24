@@ -36,11 +36,21 @@ class FactureService {
   }
 
   /// Miroir mobile de `Vente/cancel_addition` — réservé patron/gerant
-  /// (revalidé côté serveur, voir Mob::cancel_addition()).
-  Future<FactureActionResult> cancelArticle({required String idVentes, required String role}) async {
+  /// (revalidé côté serveur, voir Mob::cancel_addition()). `motif` alimente
+  /// `tracage.motif_trace` (affiché "Défaut" sur les factures annulées) et,
+  /// si `mettreEnReparation` est vrai, flague aussi l'article en réparation
+  /// (`produits.isreparation_produits`/`motif_reparation_produits`).
+  Future<FactureActionResult> cancelArticle({
+    required String idVentes,
+    required String role,
+    String? motif,
+    bool mettreEnReparation = false,
+  }) async {
     final data = await ApiClient.instance.post('cancel_addition', fields: {
       'id_ventes': idVentes,
       'role': role,
+      if (motif != null && motif.trim().isNotEmpty) 'motif': motif.trim(),
+      if (mettreEnReparation) 'mettre_en_reparation': '1',
     });
     if (data is! Map) return FactureActionResult(success: false, message: 'Réponse du serveur invalide.');
     final success = data['success'] == true;
