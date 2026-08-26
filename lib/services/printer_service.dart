@@ -77,6 +77,21 @@ class PrinterService {
     }
   }
 
+  /// Repli quand le sélecteur d'imprimantes intégré ne trouve pas
+  /// l'imprimante (bug connu de découverte réseau selon les appareils) :
+  /// ouvre le menu de partage Android standard, pour imprimer via une autre
+  /// application (Google Drive, un lecteur PDF...) où l'imprimante est déjà
+  /// détectée.
+  Future<PrintResult> sharePdf(pw.Document doc, {String filename = 'ticket.pdf'}) async {
+    try {
+      final bytes = await doc.save();
+      final ok = await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: filename);
+      return PrintResult(success: ok);
+    } catch (e) {
+      return PrintResult(success: false, message: "Partage du PDF impossible : $e");
+    }
+  }
+
   Future<PrintResult> printBytes(List<int> bytes) async {
     final cfg = await config;
     if (cfg == null || !cfg.isConfigured) {

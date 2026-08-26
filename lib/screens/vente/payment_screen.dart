@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/api_client.dart';
 import '../../core/theme.dart';
@@ -234,6 +235,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
     if (choice == null || choice == 'none') return '';
     if (choice == 'ticket') return _printTicket(lines: lines, splits: splits);
+    if (choice == 'a4_share') return _shareA4(lines: lines, sale: sale);
     return _printA4(lines: lines, sale: sale);
   }
 
@@ -262,33 +264,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  Future<pw.Document> _buildA4Doc({required List<CartLine> lines, required SaleResult sale}) async {
+    final shopInfo = await VenteService.instance.loadShopInfo();
+    final baseUrl = await ApiClient.instance.baseUrl;
+    final logo = shopInfo['logo'];
+    final logoUrl = (baseUrl != null && logo != null) ? '${baseUrl.replaceAll(RegExp(r'/+$'), '')}/uploads/logo/$logo' : null;
+    return PdfTicketBuilder.buildSaleReceiptA4(
+      shopName: shopInfo['appellation']?.isNotEmpty == true ? shopInfo['appellation']! : 'ShopCell',
+      shopAddress: shopInfo['adresse'],
+      shopLieu: shopInfo['lieu'],
+      shopNif: shopInfo['nif'],
+      shopStat: shopInfo['stat'],
+      shopPhone: shopInfo['telephone'],
+      shopEmail: shopInfo['email'],
+      logoUrl: logoUrl,
+      lines: lines,
+      total: _total,
+      numeroFacture: sale.numeroFacture,
+      dateFacture: sale.dateFacture,
+      clientNom: _selectedClient?.nomComplet,
+      clientTelephone: _selectedClient?.telephone,
+      clientCin: _selectedClient?.cin,
+    );
+  }
+
   Future<String> _printA4({required List<CartLine> lines, required SaleResult sale}) async {
     try {
-      final shopInfo = await VenteService.instance.loadShopInfo();
-      final baseUrl = await ApiClient.instance.baseUrl;
-      final logo = shopInfo['logo'];
-      final logoUrl = (baseUrl != null && logo != null) ? '${baseUrl.replaceAll(RegExp(r'/+$'), '')}/uploads/logo/$logo' : null;
-      final doc = await PdfTicketBuilder.buildSaleReceiptA4(
-        shopName: shopInfo['appellation']?.isNotEmpty == true ? shopInfo['appellation']! : 'ShopCell',
-        shopAddress: shopInfo['adresse'],
-        shopLieu: shopInfo['lieu'],
-        shopNif: shopInfo['nif'],
-        shopStat: shopInfo['stat'],
-        shopPhone: shopInfo['telephone'],
-        shopEmail: shopInfo['email'],
-        logoUrl: logoUrl,
-        lines: lines,
-        total: _total,
-        numeroFacture: sale.numeroFacture,
-        dateFacture: sale.dateFacture,
-        clientNom: _selectedClient?.nomComplet,
-        clientTelephone: _selectedClient?.telephone,
-        clientCin: _selectedClient?.cin,
-      );
+      final doc = await _buildA4Doc(lines: lines, sale: sale);
       final result = await PrinterService.instance.printPdf(doc, docName: 'Ticket');
       return result.success ? '(Document A4 envoyé.)' : '(Impression échouée : ${result.message ?? ''})';
     } catch (_) {
       return '(Impression A4 impossible.)';
+    }
+  }
+
+  /// Repli quand le sélecteur d'imprimantes intégré ne trouve pas
+  /// l'imprimante (voir `PrinterSettingsScreen`) : partage le PDF vers une
+  /// autre application où elle est déjà détectée.
+  Future<String> _shareA4({required List<CartLine> lines, required SaleResult sale}) async {
+    try {
+      final doc = await _buildA4Doc(lines: lines, sale: sale);
+      final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${sale.numeroFacture ?? sale.idClient ?? ''}.pdf');
+      return result.success ? '(PDF partagé.)' : '';
+    } catch (_) {
+      return '(Partage du PDF impossible.)';
     }
   }
 
@@ -538,6 +557,12 @@ class _PrintChoiceSheet extends StatelessWidget {
                 icon: Icons.description_rounded,
                 label: 'Format A4 (feuille)',
                 onTap: () => Navigator.of(context).pop('a4'),
+              ),
+              const SizedBox(height: 10),
+              _PrintChoiceTile(
+                icon: Icons.share_rounded,
+                label: 'Partager le PDF (autre application)',
+                onTap: () => Navigator.of(context).pop('a4_share'),
               ),
             ],
             const SizedBox(height: 10),

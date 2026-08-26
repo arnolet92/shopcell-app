@@ -178,6 +178,33 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     });
   }
 
+  /// Repli si le sélecteur d'imprimantes intégré ne trouve pas l'imprimante
+  /// (souci de découverte réseau selon les appareils) : partage le PDF vers
+  /// une autre application (Google Drive, lecteur PDF...) où elle est déjà
+  /// détectée.
+  Future<void> _shareTestA4() async {
+    setState(() {
+      _testingA4 = true;
+      _a4Message = null;
+    });
+    final doc = await PdfTicketBuilder.buildSaleReceiptA4(
+      shopName: 'ShopCell',
+      numeroFacture: 'TEST-0001',
+      clientNom: 'Client de test',
+      lines: const [],
+      total: 0,
+    );
+    final result = await PrinterService.instance.sharePdf(doc, filename: 'test_a4.pdf');
+    if (!mounted) return;
+    setState(() {
+      _testingA4 = false;
+      if (!result.success && result.message != null) {
+        _a4Message = result.message;
+        _a4MessageIsError = true;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -311,6 +338,25 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                 label: const Text('Imprimer un document A4 de test', style: TextStyle(color: AppColors.accentLight)),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.borderAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "L'imprimante n'apparaît pas dans la liste ? Essayez plutôt :",
+              style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _testingA4 ? null : _shareTestA4,
+                icon: const Icon(Icons.share_rounded, size: 18, color: AppColors.textSecondary),
+                label: const Text('Partager le PDF (autre application)', style: TextStyle(color: AppColors.textSecondary)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.border),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
