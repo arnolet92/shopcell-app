@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../core/theme.dart';
+
+/// Choix du format d'impression (ticket thermique / A4 / partage PDF) — ne
+/// montre que les moyens réellement configurés (voir `PrinterSettingsScreen`).
+/// Partagé entre l'écran de paiement (`PaymentScreen`) et le détail d'une
+/// facture déjà payée (`FactureDetailScreen`) : "même système que la vente".
+class PrintChoiceSheet extends StatelessWidget {
+  const PrintChoiceSheet({super.key, required this.hasTicket, required this.hasA4});
+  final bool hasTicket;
+  final bool hasA4;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Imprimer ?', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+            if (hasTicket)
+              _PrintChoiceTile(
+                icon: Icons.receipt_long_rounded,
+                label: 'Ticket thermique',
+                onTap: () => Navigator.of(context).pop('ticket'),
+              ),
+            if (hasA4) ...[
+              if (hasTicket) const SizedBox(height: 10),
+              _PrintChoiceTile(
+                icon: Icons.description_rounded,
+                label: 'Format A4 (feuille)',
+                onTap: () => Navigator.of(context).pop('a4'),
+              ),
+              const SizedBox(height: 10),
+              _PrintChoiceTile(
+                icon: Icons.share_rounded,
+                label: 'Partager le PDF (autre application)',
+                onTap: () => Navigator.of(context).pop('a4_share'),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('none'),
+              child: const Text('Ne pas imprimer', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrintChoiceTile extends StatelessWidget {
+  const _PrintChoiceTile({required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.bgElevated,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: AppColors.accentLight),
+              const SizedBox(width: 12),
+              Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              const Spacer(),
+              const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

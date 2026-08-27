@@ -2,7 +2,7 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import 'cart_service.dart';
+import '../models/receipt_line.dart';
 
 /// Génère le reçu/bon de garantie A4 — calqué sur le modèle papier ShopCell
 /// (voir capture fournie par l'utilisateur) : en-tête boutique + bloc
@@ -27,7 +27,7 @@ class PdfTicketBuilder {
     String? shopPhone,
     String? shopEmail,
     String? logoUrl,
-    required List<CartLine> lines,
+    required List<ReceiptLine> lines,
     required double total,
     String? numeroFacture,
     String? dateFacture,
@@ -173,7 +173,7 @@ class PdfTicketBuilder {
     );
   }
 
-  static pw.Widget _articlesTable({required List<CartLine> lines, required double total}) {
+  static pw.Widget _articlesTable({required List<ReceiptLine> lines, required double total}) {
     pw.Widget cell(String text, {bool bold = false, pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
           padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           child: pw.Text(text, style: pw.TextStyle(fontSize: 9.5, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal), textAlign: align),
@@ -192,22 +192,21 @@ class PdfTicketBuilder {
     ];
 
     for (final line in lines) {
-      final p = line.produit;
       final champs = <String>[
-        'Nom du Modèle     :  ${p.nomModel ?? ''}',
-        'N° de SERIE       :  ${p.numSerie ?? ''}',
-        'Capacité          :  ${p.nomMarque ?? ''}',
-        'Couleur           :  ${p.nomTypePiece ?? ''}',
-        'IMEI I            :  ${p.imei1 ?? ''}',
-        'IMEI II           :  ${p.imei2 ?? ''}',
+        'Nom du Modèle     :  ${line.nomModel ?? ''}',
+        'N° de SERIE       :  ${line.numSerie ?? ''}',
+        'Capacité          :  ${line.nomMarque ?? ''}',
+        'Couleur           :  ${line.nomTypePiece ?? ''}',
+        'IMEI I            :  ${line.imei1 ?? ''}',
+        'IMEI II           :  ${line.imei2 ?? ''}',
         'Défaut            :  ',
       ].join('\n');
 
       rows.add(pw.TableRow(
         children: [
           pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4), child: pw.Text(champs, style: const pw.TextStyle(fontSize: 9))),
-          cell('${line.qte}', align: pw.TextAlign.center),
-          cell(_money(p.prixUnitaire), align: pw.TextAlign.right),
+          cell(line.qte.toStringAsFixed(line.qte == line.qte.roundToDouble() ? 0 : 2), align: pw.TextAlign.center),
+          cell(_money(line.prixUnitaire), align: pw.TextAlign.right),
           cell(_money(line.total), align: pw.TextAlign.right),
         ],
       ));

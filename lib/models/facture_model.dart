@@ -82,6 +82,8 @@ class FactureDetailArticle {
     this.imei2,
     this.nomModel,
     this.nomLieu,
+    this.nomMarque,
+    this.nomTypePiece,
     this.accompagnement,
     this.prixUnitaire,
     this.montant,
@@ -97,6 +99,10 @@ class FactureDetailArticle {
   final String? imei2;
   final String? nomModel;
   final String? nomLieu;
+  /// "Capacité" (nom_capacite, via FactureManage::getFactureDetail()).
+  final String? nomMarque;
+  /// "Couleur" (nom_couleur, idem).
+  final String? nomTypePiece;
   final String? accompagnement;
   final double? prixUnitaire;
   final double? montant;
@@ -115,6 +121,8 @@ class FactureDetailArticle {
         imei2: _s(j['imei2']),
         nomModel: _s(j['nom_model']),
         nomLieu: _s(j['nom_lieu']),
+        nomMarque: _s(j['nom_capacite']),
+        nomTypePiece: _s(j['nom_couleur']),
         accompagnement: _s(j['accompagnement']),
         prixUnitaire: _d(j['prix_ventes']),
         montant: _d(j['total_recette']),

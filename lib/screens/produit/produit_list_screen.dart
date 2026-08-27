@@ -7,8 +7,12 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/produit_model.dart';
+import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
+import '../../services/auth_service.dart';
+import '../../services/cart_service.dart';
 import '../../services/produit_service.dart';
+import '../vente/cart_screen.dart';
 import 'produit_form_screen.dart';
 import 'widgets/produit_filter_bar.dart';
 import 'widgets/produit_group_card.dart';
@@ -41,11 +45,13 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   bool _loading = true;
   String? _error;
   String? _baseUrl;
+  UserModel? _user;
   Map<String, String> _imagesParDesignation = {};
 
   @override
   void initState() {
     super.initState();
+    CartService.instance.addListener(_onCartChanged);
     _bootstrap();
     ApiClient.instance.baseUrl.then((url) {
       if (!mounted) return;
@@ -56,13 +62,33 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         });
       }
     });
+    AuthService.instance.currentUser.then((user) {
+      if (mounted) setState(() => _user = user);
+    });
   }
 
   @override
   void dispose() {
+    CartService.instance.removeListener(_onCartChanged);
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onCartChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _addToCart(ProduitModel p) {
+    CartService.instance.add(p, qte: 1);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(duration: const Duration(milliseconds: 900), content: Text('${p.designation} ajouté au ticket')),
+    );
+  }
+
+  Future<void> _openCart() async {
+    if (_user == null) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CartScreen(user: _user!, baseUrl: _baseUrl)));
   }
 
   Future<void> _bootstrap() async {
@@ -238,13 +264,35 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     final valeurVente = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixUnitaire));
     final valeurAchat = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
 
+    final cart = CartService.instance;
+
     return Scaffold(
       backgroundColor: AppColors.bgDeep,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreate,
-        backgroundColor: AppColors.accent,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('Créer un article', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!cart.isEmpty) ...[
+            FloatingActionButton.extended(
+              heroTag: 'produit-cart-fab',
+              onPressed: _openCart,
+              backgroundColor: AppColors.green,
+              icon: const Icon(Icons.shopping_cart_rounded, color: Colors.black),
+              label: Text(
+                '${cart.count} · ${cart.total.toStringAsFixed(0)} Ar',
+                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          FloatingActionButton.extended(
+            heroTag: 'produit-create-fab',
+            onPressed: _openCreate,
+            backgroundColor: AppColors.accent,
+            icon: const Icon(Icons.add_rounded, color: Colors.white),
+            label: const Text('Créer un article', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -321,6 +369,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onValider: (p) => _valider(p, true),
                     onMiseEnReparation: _miseEnReparation,
                     onTerminerReparation: _terminerReparation,
+                    onAddToCart: _addToCart,
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 90)),

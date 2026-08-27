@@ -34,6 +34,7 @@ class ProduitGroupCard extends StatefulWidget {
     this.onValider,
     this.onMiseEnReparation,
     this.onTerminerReparation,
+    this.onAddToCart,
     this.onTapUnit,
   });
 
@@ -45,6 +46,10 @@ class ProduitGroupCard extends StatefulWidget {
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
   final void Function(ProduitModel produit)? onTerminerReparation;
+  /// Ajout rapide au ticket (panier de vente) depuis "Gestion d'article" —
+  /// même principe que le bouton "ajoutez au ticket" de `tabproduit2.php`
+  /// côté web (quantité 1, ajout immédiat).
+  final void Function(ProduitModel produit)? onAddToCart;
   /// Si renseigné, remplace le comportement par défaut (fiche détaillée) au
   /// tap sur une unité — utilisé par la recherche intelligente pour ouvrir
   /// l'historique de l'article au lieu de la fiche produit.
@@ -194,6 +199,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           onValider: widget.onValider,
                           onMiseEnReparation: widget.onMiseEnReparation,
                           onTerminerReparation: widget.onTerminerReparation,
+                          onAddToCart: widget.onAddToCart,
                           onTapUnit: widget.onTapUnit,
                         )),
                   ],
@@ -264,6 +270,7 @@ class _UnitRow extends StatelessWidget {
     this.onValider,
     this.onMiseEnReparation,
     this.onTerminerReparation,
+    this.onAddToCart,
     this.onTapUnit,
   });
   final ProduitModel produit;
@@ -275,6 +282,7 @@ class _UnitRow extends StatelessWidget {
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
   final void Function(ProduitModel produit)? onTerminerReparation;
+  final void Function(ProduitModel produit)? onAddToCart;
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
 
   @override
@@ -323,6 +331,12 @@ class _UnitRow extends StatelessWidget {
                     onPressed: () => onValider!(produit),
                   )
                 else ...[
+                  if (onAddToCart != null && produit.totalStock > 0 && !produit.isReparationProduits)
+                    IconButton(
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 17, color: AppColors.green),
+                      tooltip: 'Ajouter au ticket',
+                      onPressed: () => onAddToCart!(produit),
+                    ),
                   if (onMiseEnReparation != null || onTerminerReparation != null)
                     IconButton(
                       icon: Icon(

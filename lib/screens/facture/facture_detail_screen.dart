@@ -3,9 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
 import '../../models/facture_model.dart';
+import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
+import '../../services/receipt_print_service.dart';
 
 String _fmt(double v) {
   final s = v.round().toString();
@@ -30,11 +32,21 @@ class FactureDetailScreen extends StatefulWidget {
     required this.numeroFacture,
     required this.mode,
     required this.user,
+    this.clientNom,
+    this.clientTelephone,
+    this.dateFacture,
+    this.caissierPseudo,
   });
   final String idClient;
   final String numeroFacture;
   final FactureListMode mode;
   final UserModel user;
+  /// Renseignés depuis `FactureListItem` (voir `FactureListScreen`), pour
+  /// l'en-tête du reçu imprimé — pas de round-trip serveur supplémentaire.
+  final String? clientNom;
+  final String? clientTelephone;
+  final String? dateFacture;
+  final String? caissierPseudo;
 
   @override
   State<FactureDetailScreen> createState() => _FactureDetailScreenState();
@@ -109,6 +121,27 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     }
   }
 
+  /// Réimpression d'une facture déjà payée — même système que l'écran
+  /// d'encaissement (`PaymentScreen`/`ReceiptPrintService`) : ticket
+  /// thermique, PDF A4, ou partage du PDF.
+  Future<void> _print() async {
+    if (_detail == null) return;
+    final lines = [..._detail!.actifs, ..._detail!.offerts].map(ReceiptLine.fromFactureArticle).toList();
+    if (lines.isEmpty) return;
+    final message = await ReceiptPrintService.instance.offerPrint(
+      context,
+      lines: lines,
+      total: _detail!.totalWithRemise,
+      cashierName: widget.caissierPseudo,
+      clientName: widget.clientNom,
+      clientTelephone: widget.clientTelephone,
+      numeroFacture: widget.numeroFacture,
+      dateFacture: widget.dateFacture,
+    );
+    if (!mounted || message.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -123,6 +156,14 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
           backgroundColor: AppColors.bgCard,
           elevation: 0,
           title: Text(widget.numeroFacture, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
+          actions: [
+            if (_detail != null && (_detail!.actifs.isNotEmpty || _detail!.offerts.isNotEmpty))
+              IconButton(
+                onPressed: _print,
+                icon: const Icon(Icons.print_rounded, color: AppColors.accentLight),
+                tooltip: 'Imprimer',
+              ),
+          ],
         ),
         body: SafeArea(
           child: _loading

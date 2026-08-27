@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:pdf/widgets.dart' as pw;
 
-import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/payment_split.dart';
 import '../../models/personne_model.dart';
+import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/cart_service.dart';
-import '../../services/pdf_ticket_builder.dart';
-import '../../services/printer_service.dart';
-import '../../services/ticket_builder.dart';
+import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
@@ -201,8 +198,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
-      final lines = List<CartLine>.from(CartService.instance.lines);
-      final printMessage = await _offerPrint(lines: lines, splits: splits, sale: result);
+      final lines = CartService.instance.lines.map((l) => ReceiptLine.fromProduit(l.produit, qte: l.qte.toDouble())).toList();
+      final printMessage = await ReceiptPrintService.instance.offerPrint(
+        context,
+        lines: lines,
+        total: _total,
+        cashierName: widget.user.nomComplet,
+        clientName: _selectedClient?.nomComplet,
+        clientTelephone: _selectedClient?.telephone,
+        clientCin: _selectedClient?.cin,
+        paiements: splits,
+        numeroFacture: result.numeroFacture,
+        dateFacture: result.dateFacture,
+      );
       if (!mounted) return;
       CartService.instance.clear();
       Navigator.of(context).pop(true);
@@ -214,100 +222,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _submitting = false;
         _error = result.message;
       });
-    }
-  }
-
-  /// Propose le choix ticket thermique / A4 après une vente (uniquement pour
-  /// les moyens d'impression réellement configurés) — voir
-  /// `PrinterSettingsScreen` pour la configuration des deux.
-  Future<String> _offerPrint({required List<CartLine> lines, required List<PaymentSplit> splits, required SaleResult sale}) async {
-    final ticketCfg = await PrinterService.instance.config;
-    final hasTicket = ticketCfg?.isConfigured ?? false;
-    final hasA4 = await PrinterService.instance.isA4Enabled;
-    if (!hasTicket && !hasA4) return '';
-    if (!mounted) return '';
-
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.bgCard,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _PrintChoiceSheet(hasTicket: hasTicket, hasA4: hasA4),
-    );
-    if (choice == null || choice == 'none') return '';
-    if (choice == 'ticket') return _printTicket(lines: lines, splits: splits);
-    if (choice == 'a4_share') return _shareA4(lines: lines, sale: sale);
-    return _printA4(lines: lines, sale: sale);
-  }
-
-  Future<String> _printTicket({required List<CartLine> lines, required List<PaymentSplit> splits}) async {
-    try {
-      final shopInfo = await VenteService.instance.loadShopInfo();
-      final bytes = await TicketBuilder.buildSaleReceipt(
-        shopName: shopInfo['appellation']?.isNotEmpty == true ? shopInfo['appellation']! : 'ShopCell',
-        shopAddress: shopInfo['adresse'],
-        shopLieu: shopInfo['lieu'],
-        shopNif: shopInfo['nif'],
-        shopStat: shopInfo['stat'],
-        shopRcs: shopInfo['rcs'],
-        shopPhone: shopInfo['telephone'],
-        shopEmail: shopInfo['email'],
-        cashierName: widget.user.nomComplet,
-        lines: lines,
-        total: _total,
-        paiements: splits,
-        clientName: _selectedClient?.nomComplet,
-      );
-      final result = await PrinterService.instance.printBytes(bytes);
-      return result.success ? '(Ticket imprimé.)' : '(Impression échouée : ${result.message ?? 'imprimante non configurée'})';
-    } catch (_) {
-      return '(Impression du ticket impossible.)';
-    }
-  }
-
-  Future<pw.Document> _buildA4Doc({required List<CartLine> lines, required SaleResult sale}) async {
-    final shopInfo = await VenteService.instance.loadShopInfo();
-    final baseUrl = await ApiClient.instance.baseUrl;
-    final logo = shopInfo['logo'];
-    final logoUrl = (baseUrl != null && logo != null) ? '${baseUrl.replaceAll(RegExp(r'/+$'), '')}/uploads/logo/$logo' : null;
-    return PdfTicketBuilder.buildSaleReceiptA4(
-      shopName: shopInfo['appellation']?.isNotEmpty == true ? shopInfo['appellation']! : 'ShopCell',
-      shopAddress: shopInfo['adresse'],
-      shopLieu: shopInfo['lieu'],
-      shopNif: shopInfo['nif'],
-      shopStat: shopInfo['stat'],
-      shopPhone: shopInfo['telephone'],
-      shopEmail: shopInfo['email'],
-      logoUrl: logoUrl,
-      lines: lines,
-      total: _total,
-      numeroFacture: sale.numeroFacture,
-      dateFacture: sale.dateFacture,
-      clientNom: _selectedClient?.nomComplet,
-      clientTelephone: _selectedClient?.telephone,
-      clientCin: _selectedClient?.cin,
-    );
-  }
-
-  Future<String> _printA4({required List<CartLine> lines, required SaleResult sale}) async {
-    try {
-      final doc = await _buildA4Doc(lines: lines, sale: sale);
-      final result = await PrinterService.instance.printPdf(doc, docName: 'Ticket');
-      return result.success ? '(Document A4 envoyé.)' : '(Impression échouée : ${result.message ?? ''})';
-    } catch (_) {
-      return '(Impression A4 impossible.)';
-    }
-  }
-
-  /// Repli quand le sélecteur d'imprimantes intégré ne trouve pas
-  /// l'imprimante (voir `PrinterSettingsScreen`) : partage le PDF vers une
-  /// autre application où elle est déjà détectée.
-  Future<String> _shareA4({required List<CartLine> lines, required SaleResult sale}) async {
-    try {
-      final doc = await _buildA4Doc(lines: lines, sale: sale);
-      final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${sale.numeroFacture ?? sale.idClient ?? ''}.pdf');
-      return result.success ? '(PDF partagé.)' : '';
-    } catch (_) {
-      return '(Partage du PDF impossible.)';
     }
   }
 
@@ -519,91 +433,3 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
-/// Choix du format d'impression après une vente — ne montre que les
-/// imprimantes réellement configurées (voir `PrinterSettingsScreen`).
-class _PrintChoiceSheet extends StatelessWidget {
-  const _PrintChoiceSheet({required this.hasTicket, required this.hasA4});
-  final bool hasTicket;
-  final bool hasA4;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text('Imprimer la vente ?', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-            const SizedBox(height: 16),
-            if (hasTicket)
-              _PrintChoiceTile(
-                icon: Icons.receipt_long_rounded,
-                label: 'Ticket thermique',
-                onTap: () => Navigator.of(context).pop('ticket'),
-              ),
-            if (hasA4) ...[
-              if (hasTicket) const SizedBox(height: 10),
-              _PrintChoiceTile(
-                icon: Icons.description_rounded,
-                label: 'Format A4 (feuille)',
-                onTap: () => Navigator.of(context).pop('a4'),
-              ),
-              const SizedBox(height: 10),
-              _PrintChoiceTile(
-                icon: Icons.share_rounded,
-                label: 'Partager le PDF (autre application)',
-                onTap: () => Navigator.of(context).pop('a4_share'),
-              ),
-            ],
-            const SizedBox(height: 10),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop('none'),
-              child: const Text('Ne pas imprimer', style: TextStyle(color: AppColors.textSecondary)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PrintChoiceTile extends StatelessWidget {
-  const _PrintChoiceTile({required this.icon, required this.label, required this.onTap});
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.bgElevated,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: AppColors.accentLight),
-              const SizedBox(width: 12),
-              Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-              const Spacer(),
-              const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

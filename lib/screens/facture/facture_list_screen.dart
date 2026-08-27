@@ -147,7 +147,16 @@ class _FactureListScreenState extends State<FactureListScreen> {
 
   Future<void> _openDetail(FactureListItem item) async {
     final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => FactureDetailScreen(idClient: item.idClient, numeroFacture: item.numeroFacture, mode: widget.mode, user: widget.user),
+      builder: (_) => FactureDetailScreen(
+        idClient: item.idClient,
+        numeroFacture: item.numeroFacture,
+        mode: widget.mode,
+        user: widget.user,
+        clientNom: item.nomAffiche,
+        clientTelephone: item.contactAffiche == '-' ? null : item.contactAffiche,
+        dateFacture: item.dateReference,
+        caissierPseudo: item.caissierPseudo,
+      ),
     ));
     if (changed == true) _search();
   }

@@ -2,7 +2,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 
 import '../models/payment_split.dart';
 import '../models/produit_model.dart';
-import 'cart_service.dart';
+import '../models/receipt_line.dart';
 
 /// Génère les tickets ESC/POS (reçu de vente, étiquette QR article) envoyés
 /// à `PrinterService`. Papier 58mm par défaut (le format le plus courant
@@ -20,7 +20,7 @@ class TicketBuilder {
     String? shopPhone,
     String? shopEmail,
     required String cashierName,
-    required List<CartLine> lines,
+    required List<ReceiptLine> lines,
     required double total,
     List<PaymentSplit>? paiements,
     String? clientName,
@@ -53,9 +53,9 @@ class TicketBuilder {
     bytes.addAll(generator.hr());
 
     for (final line in lines) {
-      bytes.addAll(generator.text(line.produit.designation, styles: const PosStyles(bold: true)));
+      bytes.addAll(generator.text(line.designation, styles: const PosStyles(bold: true)));
       bytes.addAll(generator.row([
-        PosColumn(text: '${line.qte} x ${_money(line.produit.prixUnitaire)}', width: 7),
+        PosColumn(text: '${line.qte.toStringAsFixed(line.qte == line.qte.roundToDouble() ? 0 : 2)} x ${_money(line.prixUnitaire)}', width: 7),
         PosColumn(text: _money(line.total), width: 5, styles: const PosStyles(align: PosAlign.right)),
       ]));
     }
