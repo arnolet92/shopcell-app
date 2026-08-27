@@ -85,7 +85,14 @@ class PrinterService {
   Future<PrintResult> sharePdf(pw.Document doc, {String filename = 'ticket.pdf'}) async {
     try {
       final bytes = await doc.save();
-      final ok = await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: filename);
+      // Côté natif Android (plugin `printing`), le nom de fichier est utilisé
+      // tel quel dans un chemin (`new File(shareDirectory, filename)`) : un
+      // caractère "/" (ex: un n° de facture "4/2026-08-24") est alors compris
+      // comme un sous-dossier inexistant, l'écriture échoue et l'exception
+      // est avalée côté plugin — le partage ne s'ouvre jamais, sans qu'aucune
+      // erreur ne remonte à Flutter. On assainit donc le nom avant l'appel.
+      final safeFilename = filename.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-');
+      final ok = await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: safeFilename);
       return PrintResult(success: ok);
     } catch (e) {
       return PrintResult(success: false, message: "Partage du PDF impossible : $e");
