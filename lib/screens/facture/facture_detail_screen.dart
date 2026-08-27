@@ -121,13 +121,16 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     }
   }
 
+  bool _printing = false;
+
   /// Réimpression d'une facture déjà payée — même système que l'écran
   /// d'encaissement (`PaymentScreen`/`ReceiptPrintService`) : ticket
   /// thermique, PDF A4, ou partage du PDF.
   Future<void> _print() async {
-    if (_detail == null) return;
+    if (_detail == null || _printing) return;
     final lines = [..._detail!.actifs, ..._detail!.offerts].map(ReceiptLine.fromFactureArticle).toList();
     if (lines.isEmpty) return;
+    setState(() => _printing = true);
     final message = await ReceiptPrintService.instance.offerPrint(
       context,
       lines: lines,
@@ -138,7 +141,9 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       numeroFacture: widget.numeroFacture,
       dateFacture: widget.dateFacture,
     );
-    if (!mounted || message.isEmpty) return;
+    if (!mounted) return;
+    setState(() => _printing = false);
+    if (message.isEmpty) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -158,10 +163,9 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
           title: Text(widget.numeroFacture, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
           actions: [
             if (_detail != null && (_detail!.actifs.isNotEmpty || _detail!.offerts.isNotEmpty))
-              IconButton(
-                onPressed: _print,
-                icon: const Icon(Icons.print_rounded, color: AppColors.accentLight),
-                tooltip: 'Imprimer',
+              Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: _PrintPillButton(loading: _printing, onTap: _print),
               ),
           ],
         ),
@@ -458,6 +462,53 @@ class _CancelArticleSheetState extends State<_CancelArticleSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Bouton "Imprimer" premium (pilule dégradée) pour l'AppBar du détail
+/// facture — remplace l'icône plate par un accent visuel cohérent avec le
+/// reste de l'app (`GradientButton`).
+class _PrintPillButton extends StatelessWidget {
+  const _PrintPillButton({required this.loading, required this.onTap});
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: loading ? null : onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: AppColors.accentGradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.print_rounded, size: 16, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Imprimer',
+                      style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }

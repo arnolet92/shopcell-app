@@ -49,25 +49,36 @@ class ReceiptPrintService {
     );
     if (choice == null || choice == 'none') return '';
 
+    // La fermeture du bottom sheet (route pop) doit être totalement retombée
+    // avant de déclencher une action native (intent de partage/impression
+    // Android) : sur certains appareils, lancer l'intent trop tôt pendant la
+    // transition de fermeture le fait échouer silencieusement (l'appel
+    // renvoie quand même un succès côté plugin).
+    await Future.delayed(const Duration(milliseconds: 300));
+
     if (choice == 'ticket') {
       return _printTicket(lines: lines, total: total, cashierName: cashierName, clientName: clientName, paiements: paiements);
     }
 
-    final doc = await _buildA4Doc(
-      lines: lines,
-      total: total,
-      numeroFacture: numeroFacture,
-      dateFacture: dateFacture,
-      clientNom: clientName,
-      clientTelephone: clientTelephone,
-      clientCin: clientCin,
-    );
-    if (choice == 'a4_share') {
-      final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${numeroFacture ?? ''}.pdf');
-      return result.success ? '(PDF partagé.)' : (result.message ?? '');
+    try {
+      final doc = await _buildA4Doc(
+        lines: lines,
+        total: total,
+        numeroFacture: numeroFacture,
+        dateFacture: dateFacture,
+        clientNom: clientName,
+        clientTelephone: clientTelephone,
+        clientCin: clientCin,
+      );
+      if (choice == 'a4_share') {
+        final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${numeroFacture ?? ''}.pdf');
+        return result.success ? '(PDF partagé.)' : (result.message ?? '(Partage du PDF impossible.)');
+      }
+      final result = await PrinterService.instance.printPdf(doc, docName: 'Ticket');
+      return result.success ? '(Document A4 envoyé.)' : '(Impression échouée : ${result.message ?? ''})';
+    } catch (e) {
+      return '(Impression A4 impossible : $e)';
     }
-    final result = await PrinterService.instance.printPdf(doc, docName: 'Ticket');
-    return result.success ? '(Document A4 envoyé.)' : '(Impression échouée : ${result.message ?? ''})';
   }
 
   Future<String> _printTicket({
