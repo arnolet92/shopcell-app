@@ -48,7 +48,10 @@ class VenteService {
       'stat': field('stat'),
       'rcs': field('rcs'),
       'telephone': field('telephone'),
+      'whatsapp2': field('whatsapp2'),
       'email': field('email'),
+      'facebook': field('facebook'),
+      'instagram': field('instagram'),
       'logo': field('logo'),
     };
   }
@@ -59,8 +62,16 @@ class VenteService {
     return data.whereType<Map>().map((e) => PersonneModel.fromJson(Map<String, dynamic>.from(e))).toList();
   }
 
-  Future<SaleResult> addClient(String nom) async {
-    final data = await ApiClient.instance.post('addpersonnes', fields: {'nom': nom});
+  /// Crée un nouveau client — nom, prénom, CIN et téléphone sont recueillis
+  /// avant l'encaissement (voir `_AddClientDialog` dans `PaymentScreen`) pour
+  /// pouvoir figurer sur le reçu A4 imprimé/partagé.
+  Future<SaleResult> addClient(String nom, {String? prenom, String? cin, String? telephone}) async {
+    final data = await ApiClient.instance.post('addpersonnes', fields: {
+      'nom': nom,
+      if (prenom != null && prenom.trim().isNotEmpty) 'prenom': prenom.trim(),
+      if (cin != null && cin.trim().isNotEmpty) 'cin': cin.trim(),
+      if (telephone != null && telephone.trim().isNotEmpty) 'telephone': telephone.trim(),
+    });
     if (data is! Map) return SaleResult(success: false, message: 'Réponse invalide.');
     final error = data['error'] == true;
     return SaleResult(success: !error, message: data['msg']?.toString());

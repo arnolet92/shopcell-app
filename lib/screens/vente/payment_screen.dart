@@ -102,15 +102,32 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return _clients.where((c) => c.nomComplet.toLowerCase().contains(q)).take(10).toList();
   }
 
+  /// Ouvre le formulaire complet (nom, prénom, CIN, téléphone) plutôt que de
+  /// créer directement avec le seul nom tapé dans la recherche — ces
+  /// attributs sont nécessaires pour remplir correctement le reçu A4 imprimé
+  /// (colonne facture/client).
   Future<void> _quickAddClient() async {
-    final nom = _clientSearchCtrl.text.trim();
-    if (nom.isEmpty) return;
+    final nomPrefill = _clientSearchCtrl.text.trim();
+    final saisie = await showModalBottomSheet<_NouveauClient>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (_) => _AddClientSheet(nomInitial: nomPrefill),
+    );
+    if (saisie == null || !mounted) return;
+
     setState(() => _submitting = true);
-    final result = await VenteService.instance.addClient(nom);
+    final result = await VenteService.instance.addClient(
+      saisie.nom,
+      prenom: saisie.prenom,
+      cin: saisie.cin,
+      telephone: saisie.telephone,
+    );
     if (!mounted) return;
     if (result.success) {
       final refreshed = await VenteService.instance.loadClients();
-      final created = refreshed.where((c) => c.nomComplet.toLowerCase() == nom.toLowerCase()).toList();
+      final created = refreshed.where((c) => c.nomComplet.toLowerCase() == saisie.nom.toLowerCase()).toList();
       setState(() {
         _clients = refreshed;
         _selectedClient = created.isNotEmpty ? created.last : null;
@@ -205,6 +222,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         total: _total,
         cashierName: widget.user.nomComplet,
         clientName: _selectedClient?.nomComplet,
+        clientPrenom: _selectedClient?.prenom,
         clientTelephone: _selectedClient?.telephone,
         clientCin: _selectedClient?.cin,
         paiements: splits,
@@ -429,6 +447,86 @@ class _SummaryRow extends StatelessWidget {
         Text(label, style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
         Text(value, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: valueColor ?? AppColors.textPrimary)),
       ],
+    );
+  }
+}
+
+class _NouveauClient {
+  _NouveauClient({required this.nom, this.prenom, this.cin, this.telephone});
+  final String nom;
+  final String? prenom;
+  final String? cin;
+  final String? telephone;
+}
+
+/// Formulaire de création client (nom, prénom, CIN, téléphone) — recueillis
+/// avant l'encaissement pour pouvoir remplir le reçu A4 (colonne facture/
+/// client), comme sur le modèle papier ShopCell.
+class _AddClientSheet extends StatefulWidget {
+  const _AddClientSheet({required this.nomInitial});
+  final String nomInitial;
+
+  @override
+  State<_AddClientSheet> createState() => _AddClientSheetState();
+}
+
+class _AddClientSheetState extends State<_AddClientSheet> {
+  late final _nomCtrl = TextEditingController(text: widget.nomInitial);
+  final _prenomCtrl = TextEditingController();
+  final _cinCtrl = TextEditingController();
+  final _telephoneCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _nomCtrl.dispose();
+    _prenomCtrl.dispose();
+    _cinCtrl.dispose();
+    _telephoneCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final nom = _nomCtrl.text.trim();
+    if (nom.isEmpty) return;
+    Navigator.of(context).pop(_NouveauClient(
+      nom: nom,
+      prenom: _prenomCtrl.text.trim().isEmpty ? null : _prenomCtrl.text.trim(),
+      cin: _cinCtrl.text.trim().isEmpty ? null : _cinCtrl.text.trim(),
+      telephone: _telephoneCtrl.text.trim().isEmpty ? null : _telephoneCtrl.text.trim(),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Nouveau client', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 16),
+            InlineField(label: 'Nom', controller: _nomCtrl, prefixIcon: Icons.badge_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.person_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'N°CIN', controller: _cinCtrl, prefixIcon: Icons.credit_card_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'Téléphone', controller: _telephoneCtrl, prefixIcon: Icons.phone_rounded, keyboardType: TextInputType.phone),
+            const SizedBox(height: 20),
+            GradientButton(label: 'Créer le client', icon: Icons.check_rounded, onPressed: _submit),
+          ],
+        ),
+      ),
     );
   }
 }

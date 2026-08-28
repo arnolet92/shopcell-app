@@ -7,8 +7,10 @@ import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/payment_split.dart';
 import '../../models/produit_model.dart';
+import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/echange_service.dart';
+import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
@@ -208,8 +210,37 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     );
     if (!mounted) return;
     if (result.success) {
+      // Imprime uniquement le NOUVEL article remis au client (pas l'ancien
+      // repris en échange) — P.U = prix de vente d'origine + prix ajouté,
+      // exactement le "montant final" déjà calculé par le récapitulatif.
+      final entete = _entete;
+      final lines = [
+        ReceiptLine(
+          designation: produit.designation,
+          qte: 1,
+          prixUnitaire: rec.montantFinal,
+          total: rec.montantFinal,
+          numSerie: produit.numSerie,
+          imei1: produit.imei1,
+          imei2: produit.imei2,
+          nomModel: produit.nomModel,
+          nomMarque: produit.nomMarque,
+          nomTypePiece: produit.nomTypePiece,
+        ),
+      ];
+      final printMessage = await ReceiptPrintService.instance.offerPrint(
+        context,
+        lines: lines,
+        total: rec.montantFinal,
+        cashierName: widget.user.nomComplet,
+        clientName: entete?['nom_complet']?.toString(),
+        numeroFacture: entete?['numero_facture']?.toString(),
+      );
+      if (!mounted) return;
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message ?? 'Échange validé avec succès.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${result.message ?? 'Échange validé avec succès.'} $printMessage')),
+      );
     } else {
       setState(() {
         _submitting = false;

@@ -25,13 +25,17 @@ class PdfTicketBuilder {
     String? shopNif,
     String? shopStat,
     String? shopPhone,
+    String? shopPhone2,
     String? shopEmail,
+    String? shopFacebook,
+    String? shopInstagram,
     String? logoUrl,
     required List<ReceiptLine> lines,
     required double total,
     String? numeroFacture,
     String? dateFacture,
     String? clientNom,
+    String? clientPrenom,
     String? clientTelephone,
     String? clientCin,
   }) async {
@@ -65,11 +69,15 @@ class PdfTicketBuilder {
               shopNif: shopNif,
               shopStat: shopStat,
               shopPhone: shopPhone,
+              shopPhone2: shopPhone2,
               shopEmail: shopEmail,
+              shopFacebook: shopFacebook,
+              shopInstagram: shopInstagram,
               logo: logo,
               dateStr: dateStr,
               numeroFacture: numeroFacture,
               clientNom: clientNom,
+              clientPrenom: clientPrenom,
               clientTelephone: clientTelephone,
               clientCin: clientCin,
             ),
@@ -98,6 +106,16 @@ class PdfTicketBuilder {
     );
   }
 
+  /// Ligne "étiquette : valeur" compacte pour les colonnes 1/2 de l'en-tête
+  /// (contact boutique) — même esprit que `_labelRow` mais sans cadre de
+  /// libellé fixe, pour un simple repère textuel (ex: "WhatsApp : ...").
+  static pw.Widget _tagLine(String tag, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 1.5),
+      child: pw.Text('$tag : $value', style: const pw.TextStyle(fontSize: 8.5)),
+    );
+  }
+
   static pw.Widget _header({
     required String shopName,
     String? shopAddress,
@@ -105,43 +123,35 @@ class PdfTicketBuilder {
     String? shopNif,
     String? shopStat,
     String? shopPhone,
+    String? shopPhone2,
     String? shopEmail,
+    String? shopFacebook,
+    String? shopInstagram,
     pw.ImageProvider? logo,
     required String dateStr,
     String? numeroFacture,
     String? clientNom,
+    String? clientPrenom,
     String? clientTelephone,
     String? clientCin,
   }) {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // Bloc boutique (logo + coordonnées)
+        // Colonne 1 : numéros WhatsApp, logo, identifiants légaux.
         pw.Expanded(
-          flex: 3,
+          flex: 2,
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  if (logo != null) ...[
-                    pw.Container(width: 40, height: 40, child: pw.Image(logo)),
-                    pw.SizedBox(width: 8),
-                  ],
-                  pw.Text(shopName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              if (shopPhone != null && shopPhone.trim().isNotEmpty)
-                pw.Text(shopPhone, style: const pw.TextStyle(fontSize: 9)),
-              if (shopAddress != null && shopAddress.trim().isNotEmpty)
-                pw.Text('Centre commercial : $shopAddress', style: const pw.TextStyle(fontSize: 9)),
-              if (shopLieu != null && shopLieu.trim().isNotEmpty)
-                pw.Text(shopLieu, style: const pw.TextStyle(fontSize: 9)),
-              if (shopEmail != null && shopEmail.trim().isNotEmpty)
-                pw.Text(shopEmail, style: const pw.TextStyle(fontSize: 9)),
-              pw.SizedBox(height: 4),
+              if (shopPhone != null && shopPhone.trim().isNotEmpty) _tagLine('WhatsApp', shopPhone),
+              if (shopPhone2 != null && shopPhone2.trim().isNotEmpty) _tagLine('WhatsApp', shopPhone2),
+              pw.SizedBox(height: 6),
+              if (logo != null)
+                pw.Container(width: 48, height: 48, child: pw.Image(logo))
+              else
+                pw.Text(shopName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
               if (shopNif != null && shopNif.trim().isNotEmpty)
                 pw.Text('NIF: $shopNif', style: const pw.TextStyle(fontSize: 8.5)),
               if (shopStat != null && shopStat.trim().isNotEmpty)
@@ -149,10 +159,30 @@ class PdfTicketBuilder {
             ],
           ),
         ),
-        pw.SizedBox(width: 16),
-        // Bloc facture/client
+        pw.SizedBox(width: 10),
+        // Colonne 2 : centre commercial / adresse / email / réseaux sociaux.
         pw.Expanded(
           flex: 2,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(shopName, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 2),
+              if (shopAddress != null && shopAddress.trim().isNotEmpty)
+                pw.Text('Centre commercial : $shopAddress', style: const pw.TextStyle(fontSize: 8.5)),
+              if (shopLieu != null && shopLieu.trim().isNotEmpty)
+                pw.Text(shopLieu, style: const pw.TextStyle(fontSize: 8.5)),
+              pw.SizedBox(height: 4),
+              if (shopEmail != null && shopEmail.trim().isNotEmpty) _tagLine('Email', shopEmail),
+              if (shopFacebook != null && shopFacebook.trim().isNotEmpty) _tagLine('Facebook', shopFacebook),
+              if (shopInstagram != null && shopInstagram.trim().isNotEmpty) _tagLine('Instagram', shopInstagram),
+            ],
+          ),
+        ),
+        pw.SizedBox(width: 10),
+        // Colonne 3 : facture/client (inchangée).
+        pw.Expanded(
+          flex: 3,
           child: pw.Container(
             padding: const pw.EdgeInsets.all(8),
             decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.6)),
@@ -162,7 +192,7 @@ class PdfTicketBuilder {
                 _labelRow('Date', dateStr),
                 _labelRow('N° Facture', numeroFacture),
                 _labelRow('Nom', clientNom),
-                _labelRow('Prénom', null),
+                _labelRow('Prénom', clientPrenom),
                 _labelRow('N°CIN', clientCin),
                 _labelRow('Téléphone', clientTelephone),
               ],
@@ -193,7 +223,8 @@ class PdfTicketBuilder {
 
     for (final line in lines) {
       final champs = <String>[
-        'Nom du Modèle     :  ${line.nomModel ?? ''}',
+        'Nom du Modèle     :  ${line.designation}',
+        'N° du Modèle      :  ${line.nomModel ?? ''}',
         'N° de SERIE       :  ${line.numSerie ?? ''}',
         'Capacité          :  ${line.nomMarque ?? ''}',
         'Couleur           :  ${line.nomTypePiece ?? ''}',
