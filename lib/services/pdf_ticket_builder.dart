@@ -106,13 +106,60 @@ class PdfTicketBuilder {
     );
   }
 
-  /// Ligne "étiquette : valeur" compacte pour les colonnes 1/2 de l'en-tête
-  /// (contact boutique) — même esprit que `_labelRow` mais sans cadre de
-  /// libellé fixe, pour un simple repère textuel (ex: "WhatsApp : ...").
-  static pw.Widget _tagLine(String tag, String value) {
+  // Couleurs de marque approximatives (WhatsApp / Facebook), utilisées pour
+  // les badges d'icône ci-dessous.
+  static final _whatsappGreen = PdfColor.fromInt(0xFF25D366);
+  static final _facebookBlue = PdfColor.fromInt(0xFF1877F2);
+  static final _instagramPink = PdfColor.fromInt(0xFFC13584);
+
+  /// Petit badge rond coloré avec un glyphe blanc (lettre ASCII sûre, un
+  /// caractère d'icône dédiée n'étant pas fiable à générer en PDF sans
+  /// embarquer une police d'icônes complète) — sert de "vraie icône" pour
+  /// WhatsApp/Email/Facebook.
+  static pw.Widget _iconBadge({required PdfColor color, required String glyph, double size = 11}) {
+    return pw.Container(
+      width: size,
+      height: size,
+      alignment: pw.Alignment.center,
+      decoration: pw.BoxDecoration(color: color, shape: pw.BoxShape.circle),
+      child: pw.Text(
+        glyph,
+        style: pw.TextStyle(fontSize: size * 0.55, color: PdfColors.white, fontWeight: pw.FontWeight.bold),
+      ),
+    );
+  }
+
+  /// Badge Instagram (petit "appareil photo" stylisé : carré arrondi rose +
+  /// cercle blanc central), entièrement composé de formes vectorielles — pas
+  /// de glyphe de police nécessaire.
+  static pw.Widget _instagramBadge({double size = 11}) {
+    return pw.Container(
+      width: size,
+      height: size,
+      decoration: pw.BoxDecoration(color: _instagramPink, borderRadius: pw.BorderRadius.circular(size * 0.28)),
+      child: pw.Center(
+        child: pw.Container(
+          width: size * 0.5,
+          height: size * 0.5,
+          decoration: pw.BoxDecoration(shape: pw.BoxShape.circle, border: pw.Border.all(color: PdfColors.white, width: 0.7)),
+        ),
+      ),
+    );
+  }
+
+  /// Ligne "icône + valeur" compacte pour les colonnes 1/2 de l'en-tête
+  /// (contact boutique) — ex: badge WhatsApp vert + numéro.
+  static pw.Widget _iconLine(pw.Widget icon, String value) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 1.5),
-      child: pw.Text('$tag : $value', style: const pw.TextStyle(fontSize: 8.5)),
+      padding: const pw.EdgeInsets.only(bottom: 2.5),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          icon,
+          pw.SizedBox(width: 4),
+          pw.Expanded(child: pw.Text(value, style: const pw.TextStyle(fontSize: 8.5))),
+        ],
+      ),
     );
   }
 
@@ -144,8 +191,10 @@ class PdfTicketBuilder {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              if (shopPhone != null && shopPhone.trim().isNotEmpty) _tagLine('WhatsApp', shopPhone),
-              if (shopPhone2 != null && shopPhone2.trim().isNotEmpty) _tagLine('WhatsApp', shopPhone2),
+              if (shopPhone != null && shopPhone.trim().isNotEmpty)
+                _iconLine(_iconBadge(color: _whatsappGreen, glyph: 'W'), shopPhone),
+              if (shopPhone2 != null && shopPhone2.trim().isNotEmpty)
+                _iconLine(_iconBadge(color: _whatsappGreen, glyph: 'W'), shopPhone2),
               pw.SizedBox(height: 6),
               if (logo != null)
                 pw.Container(width: 48, height: 48, child: pw.Image(logo))
@@ -173,9 +222,12 @@ class PdfTicketBuilder {
               if (shopLieu != null && shopLieu.trim().isNotEmpty)
                 pw.Text(shopLieu, style: const pw.TextStyle(fontSize: 8.5)),
               pw.SizedBox(height: 4),
-              if (shopEmail != null && shopEmail.trim().isNotEmpty) _tagLine('Email', shopEmail),
-              if (shopFacebook != null && shopFacebook.trim().isNotEmpty) _tagLine('Facebook', shopFacebook),
-              if (shopInstagram != null && shopInstagram.trim().isNotEmpty) _tagLine('Instagram', shopInstagram),
+              if (shopEmail != null && shopEmail.trim().isNotEmpty)
+                _iconLine(_iconBadge(color: PdfColors.grey700, glyph: '@'), shopEmail),
+              if (shopFacebook != null && shopFacebook.trim().isNotEmpty)
+                _iconLine(_iconBadge(color: _facebookBlue, glyph: 'f'), shopFacebook),
+              if (shopInstagram != null && shopInstagram.trim().isNotEmpty)
+                _iconLine(_instagramBadge(), shopInstagram),
             ],
           ),
         ),
