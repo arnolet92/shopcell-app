@@ -13,7 +13,15 @@ import '../models/receipt_line.dart';
 /// G3800) pilotées via le système d'impression Android (`printing`), et non
 /// en ESC/POS brut comme `TicketBuilder`.
 class PdfTicketBuilder {
-  static String _money(double v) => '${v.toStringAsFixed(0)} Ar';
+  static String _money(double v) {
+    final s = v.round().toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+      buf.write(s[i]);
+    }
+    return '${buf.toString()} Ar';
+  }
 
   static const _labelStyle = pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold);
   static const _valueStyle = pw.TextStyle(fontSize: 9.5);
@@ -26,6 +34,7 @@ class PdfTicketBuilder {
     String? shopStat,
     String? shopPhone,
     String? shopPhone2,
+    String? shopPhoneMobile,
     String? shopEmail,
     String? shopFacebook,
     String? shopInstagram,
@@ -38,6 +47,10 @@ class PdfTicketBuilder {
     String? clientPrenom,
     String? clientTelephone,
     String? clientCin,
+    /// Réimpression d'une facture déjà payée (`Factures payées`) : affiche
+    /// un filigrane diagonal "FACTURE COPIE" pour la distinguer de
+    /// l'original imprimé au moment de la vente.
+    bool isCopie = false,
   }) async {
     final doc = pw.Document();
 
@@ -59,38 +72,62 @@ class PdfTicketBuilder {
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(26),
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+        build: (context) => pw.Stack(
           children: [
-            _header(
-              shopName: shopName,
-              shopAddress: shopAddress,
-              shopLieu: shopLieu,
-              shopNif: shopNif,
-              shopStat: shopStat,
-              shopPhone: shopPhone,
-              shopPhone2: shopPhone2,
-              shopEmail: shopEmail,
-              shopFacebook: shopFacebook,
-              shopInstagram: shopInstagram,
-              logo: logo,
-              dateStr: dateStr,
-              numeroFacture: numeroFacture,
-              clientNom: clientNom,
-              clientPrenom: clientPrenom,
-              clientTelephone: clientTelephone,
-              clientCin: clientCin,
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _header(
+                  shopName: shopName,
+                  shopAddress: shopAddress,
+                  shopLieu: shopLieu,
+                  shopNif: shopNif,
+                  shopStat: shopStat,
+                  shopPhone: shopPhone,
+                  shopPhone2: shopPhone2,
+                  shopPhoneMobile: shopPhoneMobile,
+                  shopEmail: shopEmail,
+                  shopFacebook: shopFacebook,
+                  shopInstagram: shopInstagram,
+                  logo: logo,
+                  dateStr: dateStr,
+                  numeroFacture: numeroFacture,
+                  clientNom: clientNom,
+                  clientPrenom: clientPrenom,
+                  clientTelephone: clientTelephone,
+                  clientCin: clientCin,
+                ),
+                pw.SizedBox(height: 10),
+                _articlesTable(lines: lines, total: total),
+                pw.SizedBox(height: 10),
+                _garantieEtSignature(),
+              ],
             ),
-            pw.SizedBox(height: 10),
-            _articlesTable(lines: lines, total: total),
-            pw.SizedBox(height: 10),
-            _garantieEtSignature(),
+            if (isCopie) pw.Positioned.fill(child: _copieWatermark()),
           ],
         ),
       ),
     );
 
     return doc;
+  }
+
+  /// Filigrane diagonal gris "FACTURE COPIE" — affiché en surimpression
+  /// discrète (faible opacité) sur toute la page, pour une réimpression
+  /// depuis "Factures payées".
+  static pw.Widget _copieWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: -0.6,
+        child: pw.Opacity(
+          opacity: 0.16,
+          child: pw.Text(
+            'FACTURE COPIE',
+            style: pw.TextStyle(fontSize: 62, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700, letterSpacing: 4),
+          ),
+        ),
+      ),
+    );
   }
 
   static pw.Widget _labelRow(String label, String? value) {
@@ -111,6 +148,7 @@ class PdfTicketBuilder {
   static final _whatsappGreen = PdfColor.fromInt(0xFF25D366);
   static final _facebookBlue = PdfColor.fromInt(0xFF1877F2);
   static final _instagramPink = PdfColor.fromInt(0xFFC13584);
+  static final _phoneBlueGrey = PdfColor.fromInt(0xFF546E7A);
 
   /// Petit badge rond coloré avec un glyphe blanc (lettre ASCII sûre, un
   /// caractère d'icône dédiée n'étant pas fiable à générer en PDF sans
@@ -171,6 +209,7 @@ class PdfTicketBuilder {
     String? shopStat,
     String? shopPhone,
     String? shopPhone2,
+    String? shopPhoneMobile,
     String? shopEmail,
     String? shopFacebook,
     String? shopInstagram,
@@ -185,22 +224,24 @@ class PdfTicketBuilder {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        // Colonne 1 : numéros WhatsApp, logo, identifiants légaux.
+        // Colonne 1 : logo, numéros WhatsApp/mobile, identifiants légaux.
         pw.Expanded(
           flex: 2,
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
+              if (logo != null)
+                pw.Container(width: 72, height: 72, child: pw.Image(logo, fit: pw.BoxFit.contain))
+              else
+                pw.Text(shopName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
               if (shopPhone != null && shopPhone.trim().isNotEmpty)
                 _iconLine(_iconBadge(color: _whatsappGreen, glyph: 'W'), shopPhone),
               if (shopPhone2 != null && shopPhone2.trim().isNotEmpty)
                 _iconLine(_iconBadge(color: _whatsappGreen, glyph: 'W'), shopPhone2),
-              pw.SizedBox(height: 6),
-              if (logo != null)
-                pw.Container(width: 48, height: 48, child: pw.Image(logo))
-              else
-                pw.Text(shopName, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-              pw.SizedBox(height: 6),
+              if (shopPhoneMobile != null && shopPhoneMobile.trim().isNotEmpty)
+                _iconLine(_iconBadge(color: _phoneBlueGrey, glyph: 'T'), shopPhoneMobile),
+              pw.SizedBox(height: 4),
               if (shopNif != null && shopNif.trim().isNotEmpty)
                 pw.Text('NIF: $shopNif', style: const pw.TextStyle(fontSize: 8.5)),
               if (shopStat != null && shopStat.trim().isNotEmpty)
@@ -371,7 +412,7 @@ class PdfTicketBuilder {
           style: small,
         ),
         pw.SizedBox(height: 8),
-        pw.Text('État de la batterie :', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.red, decoration: pw.TextDecoration.underline)),
+        pw.Text('ÉTAT DE LA BATTERIE :', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.red, decoration: pw.TextDecoration.underline)),
         pw.Text(
           "Pour un iPhone datant d'environ un an ou plus, il est fort probable que la capacité de la batterie soit moins de 90% voire même moins de 80%. "
           "Si elle affiche près de 100%, cela signifie qu'elle a été changée ou boostée (reconditionnée).",

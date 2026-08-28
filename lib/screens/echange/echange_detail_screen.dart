@@ -9,6 +9,7 @@ import '../../models/payment_split.dart';
 import '../../models/produit_model.dart';
 import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
+import '../../services/app_data_cache.dart';
 import '../../services/echange_service.dart';
 import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
@@ -210,6 +211,11 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     );
     if (!mounted) return;
     if (result.success) {
+      // L'échange mouvemente le stock des deux articles (ancien restocké,
+      // nouveau décrémenté) et modifie la facture existante.
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
+
       // Imprime uniquement le NOUVEL article remis au client (pas l'ancien
       // repris en échange) — P.U = prix de vente d'origine + prix ajouté,
       // exactement le "montant final" déjà calculé par le récapitulatif.

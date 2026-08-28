@@ -52,6 +52,11 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   void initState() {
     super.initState();
     CartService.instance.addListener(_onCartChanged);
+    // Écran persistant (IndexedStack de HomeShell) : sans cet abonnement,
+    // une vente/annulation/échange effectué depuis un autre écran (qui
+    // invalide le cache produits) ne rafraîchit cette liste qu'au
+    // redémarrage complet de l'app.
+    AppDataCache.instance.addListener(_onProduitsCacheChanged);
     _bootstrap();
     ApiClient.instance.baseUrl.then((url) {
       if (!mounted) return;
@@ -70,6 +75,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   @override
   void dispose() {
     CartService.instance.removeListener(_onCartChanged);
+    AppDataCache.instance.removeListener(_onProduitsCacheChanged);
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -77,6 +83,14 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 
   void _onCartChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onProduitsCacheChanged() {
+    // Ne recharge que si le cache a bien été invalidé (pas à chaque
+    // notification d'un autre domaine, ex: facturesPayees) — cet écran fait
+    // toujours un vrai appel réseau (filtres actifs), pas la peine de le
+    // déclencher pour rien.
+    if (AppDataCache.instance.produits == null) _reload();
   }
 
   void _addToCart(ProduitModel p) {

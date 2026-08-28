@@ -49,6 +49,7 @@ class VenteService {
       'rcs': field('rcs'),
       'telephone': field('telephone'),
       'whatsapp2': field('whatsapp2'),
+      'telephoneMobile': field('telephone_mobile'),
       'email': field('email'),
       'facebook': field('facebook'),
       'instagram': field('instagram'),

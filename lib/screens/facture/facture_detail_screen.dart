@@ -116,7 +116,11 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     );
     if (result.success) {
       _changed = true;
+      // L'annulation restocke l'article (et éventuellement le met en
+      // réparation) : le cache "Gestion d'article"/Vente doit lui aussi être
+      // rafraîchi, pas seulement les factures payées.
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
+      AppDataCache.instance.invalidate(CacheDomain.produits);
       _load();
     }
   }
@@ -140,6 +144,7 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       clientTelephone: widget.clientTelephone,
       numeroFacture: widget.numeroFacture,
       dateFacture: widget.dateFacture,
+      isCopie: true,
     );
     if (!mounted) return;
     setState(() => _printing = false);

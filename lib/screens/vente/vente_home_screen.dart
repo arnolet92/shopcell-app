@@ -43,6 +43,11 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
   void initState() {
     super.initState();
     CartService.instance.addListener(_onCartChanged);
+    // Cet écran reste monté en permanence (IndexedStack de HomeShell) : sans
+    // cet abonnement, une vente/annulation/échange effectué depuis un autre
+    // écran (qui invalide le cache produits) ne se reflète ici qu'au
+    // redémarrage complet de l'app, puisque initState() ne se rejoue jamais.
+    AppDataCache.instance.addListener(_load);
     _load();
     ApiClient.instance.baseUrl.then((url) {
       if (!mounted) return;
@@ -61,6 +66,7 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
   @override
   void dispose() {
     CartService.instance.removeListener(_onCartChanged);
+    AppDataCache.instance.removeListener(_load);
     _searchController.dispose();
     super.dispose();
   }
