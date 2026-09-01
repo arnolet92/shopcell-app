@@ -30,6 +30,7 @@ class ProduitGroupCard extends StatefulWidget {
     required this.baseUrl,
     this.imagesParDesignation = const {},
     this.showValiderAction = false,
+    this.restrictedInfo = false,
     this.onEdit,
     this.onValider,
     this.onMiseEnReparation,
@@ -42,6 +43,10 @@ class ProduitGroupCard extends StatefulWidget {
   final String? baseUrl;
   final Map<String, String> imagesParDesignation;
   final bool showValiderAction;
+  /// Comptes hors patron/gérant/magasinier : n'affiche que prix de vente,
+  /// modèle, n° de série, IMEI et batterie (masque achat/revient, capacité,
+  /// couleur, carton, défaut, stockage, fournisseur, description).
+  final bool restrictedInfo;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
@@ -154,10 +159,11 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                                   label: '${group.items.length} unité(s)',
                                   color: AppColors.blue,
                                 ),
-                                _Badge(
-                                  label: '${_fmt(group.totalAchat)} Ar',
-                                  color: AppColors.yellow,
-                                ),
+                                if (!widget.restrictedInfo)
+                                  _Badge(
+                                    label: '${_fmt(group.totalAchat)} Ar',
+                                    color: AppColors.yellow,
+                                  ),
                               ],
                             ),
                           ],
@@ -169,7 +175,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                       ),
                     ],
                   ),
-                  if (group.stockByCapacity.isNotEmpty || group.stockByLocation.isNotEmpty) ...[
+                  if (!widget.restrictedInfo && (group.stockByCapacity.isNotEmpty || group.stockByLocation.isNotEmpty)) ...[
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
@@ -195,6 +201,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           fallbackImageUrl:
                               widget.baseUrl != null ? _groupImageUrl(group, widget.baseUrl!, widget.imagesParDesignation) : null,
                           showValiderAction: widget.showValiderAction,
+                          restrictedInfo: widget.restrictedInfo,
                           onEdit: widget.onEdit,
                           onValider: widget.onValider,
                           onMiseEnReparation: widget.onMiseEnReparation,
@@ -266,6 +273,7 @@ class _UnitRow extends StatelessWidget {
     required this.baseUrl,
     required this.fallbackImageUrl,
     this.showValiderAction = false,
+    this.restrictedInfo = false,
     this.onEdit,
     this.onValider,
     this.onMiseEnReparation,
@@ -278,6 +286,7 @@ class _UnitRow extends StatelessWidget {
   final String? baseUrl;
   final String? fallbackImageUrl;
   final bool showValiderAction;
+  final bool restrictedInfo;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
@@ -298,6 +307,7 @@ class _UnitRow extends StatelessWidget {
                 baseUrl: baseUrl,
                 imageUrlOverride: resolvedImage,
                 showPrintQr: true,
+                restrictedInfo: restrictedInfo,
               ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),

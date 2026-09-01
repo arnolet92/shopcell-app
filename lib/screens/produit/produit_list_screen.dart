@@ -277,6 +277,10 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     final groups = ProduitGroup.groupBy(_produits);
     final valeurVente = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixUnitaire));
     final valeurAchat = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
+    // Comptes hors patron/gérant/magasinier : n'affichent que prix de vente,
+    // modèle, n° de série, IMEI et batterie sur les articles (le rôle n'est
+    // pas encore chargé -> restriction par défaut, par sécurité).
+    final restrictedInfo = !(_user?.hasFullArticleAccess ?? false);
 
     final cart = CartService.instance;
 
@@ -343,7 +347,12 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: StatBar(nbArticles: _produits.length, valeurStock: valeurVente, valeurAchat: valeurAchat),
+                  child: StatBar(
+                    nbArticles: _produits.length,
+                    valeurStock: valeurVente,
+                    valeurAchat: valeurAchat,
+                    restrictedInfo: restrictedInfo,
+                  ),
                 ),
               ),
               SliverToBoxAdapter(
@@ -379,6 +388,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     baseUrl: _baseUrl,
                     imagesParDesignation: _imagesParDesignation,
                     showValiderAction: _vue == ProduitVue.attente,
+                    restrictedInfo: restrictedInfo,
                     onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
                     onValider: (p) => _valider(p, true),
                     onMiseEnReparation: _miseEnReparation,

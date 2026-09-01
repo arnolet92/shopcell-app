@@ -30,6 +30,7 @@ Future<void> showProduitDetailSheet(
   String? imageUrlOverride,
   VoidCallback? onAddToCart,
   bool showPrintQr = false,
+  bool restrictedInfo = false,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -42,6 +43,7 @@ Future<void> showProduitDetailSheet(
       imageUrlOverride: imageUrlOverride,
       onAddToCart: onAddToCart,
       showPrintQr: showPrintQr,
+      restrictedInfo: restrictedInfo,
     ),
   );
 }
@@ -53,6 +55,7 @@ class _ProduitDetailContent extends StatelessWidget {
     this.imageUrlOverride,
     this.onAddToCart,
     this.showPrintQr = false,
+    this.restrictedInfo = false,
   });
 
   final ProduitModel produit;
@@ -60,6 +63,9 @@ class _ProduitDetailContent extends StatelessWidget {
   final String? imageUrlOverride;
   final VoidCallback? onAddToCart;
   final bool showPrintQr;
+  /// Comptes hors patron/gérant/magasinier : seuls le prix de vente, le
+  /// modèle, le n° de série, les IMEI et la batterie sont affichés.
+  final bool restrictedInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -118,42 +124,48 @@ class _ProduitDetailContent extends StatelessWidget {
                   ),
                 ),
               ],
-              if (produit.codeProduits != null || produit.numSerie != null)
+              if ((!restrictedInfo && produit.codeProduits != null) || produit.numSerie != null)
                 Center(
                   child: Text(
-                    [if (produit.codeProduits != null) 'Code: ${produit.codeProduits}', if (produit.numSerie != null) 'S/N: ${produit.numSerie}']
-                        .join('  ·  '),
+                    [
+                      if (!restrictedInfo && produit.codeProduits != null) 'Code: ${produit.codeProduits}',
+                      if (produit.numSerie != null) 'S/N: ${produit.numSerie}',
+                    ].join('  ·  '),
                     style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ),
               const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: _PriceTile(label: 'Prix de vente', value: _fmtMoney(produit.prixUnitaire), color: AppColors.green),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _PriceTile(label: "Prix d'achat", value: _fmtMoney(produit.prixAchats), color: AppColors.blue),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _PriceTile(label: 'Prix de revient', value: _fmtMoney(produit.prixRevient), color: AppColors.yellow),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _PriceTile(
-                      label: 'Stock disponible',
-                      value: produit.totalStock.toStringAsFixed(0),
-                      color: produit.totalStock > 0 ? AppColors.accentLight : AppColors.red,
+              if (restrictedInfo)
+                _PriceTile(label: 'Prix de vente', value: _fmtMoney(produit.prixUnitaire), color: AppColors.green)
+              else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PriceTile(label: 'Prix de vente', value: _fmtMoney(produit.prixUnitaire), color: AppColors.green),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PriceTile(label: "Prix d'achat", value: _fmtMoney(produit.prixAchats), color: AppColors.blue),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PriceTile(label: 'Prix de revient', value: _fmtMoney(produit.prixRevient), color: AppColors.yellow),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PriceTile(
+                        label: 'Stock disponible',
+                        value: produit.totalStock.toStringAsFixed(0),
+                        color: produit.totalStock > 0 ? AppColors.accentLight : AppColors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 22),
               Text('Caractéristiques', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
               const SizedBox(height: 10),
@@ -161,21 +173,21 @@ class _ProduitDetailContent extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (produit.nomSousType != null) _AttrChip(icon: Icons.layers_rounded, label: produit.nomSousType!),
+                  if (!restrictedInfo && produit.nomSousType != null) _AttrChip(icon: Icons.layers_rounded, label: produit.nomSousType!),
                   if (produit.nomModel != null) _AttrChip(icon: Icons.phone_android_rounded, label: produit.nomModel!),
-                  if (produit.nomSysteme != null) _AttrChip(icon: Icons.settings_suggest_rounded, label: produit.nomSysteme!),
-                  if (produit.nomMarque != null) _AttrChip(icon: Icons.memory_rounded, label: produit.nomMarque!),
-                  if (produit.nomTypePiece != null) _AttrChip(icon: Icons.palette_rounded, label: produit.nomTypePiece!),
+                  if (!restrictedInfo && produit.nomSysteme != null) _AttrChip(icon: Icons.settings_suggest_rounded, label: produit.nomSysteme!),
+                  if (!restrictedInfo && produit.nomMarque != null) _AttrChip(icon: Icons.memory_rounded, label: produit.nomMarque!),
+                  if (!restrictedInfo && produit.nomTypePiece != null) _AttrChip(icon: Icons.palette_rounded, label: produit.nomTypePiece!),
                   if (produit.nomSousCategoriePiece != null) _AttrChip(icon: Icons.battery_full_rounded, label: produit.nomSousCategoriePiece!),
-                  if (produit.nomCarton != null) _AttrChip(icon: Icons.inventory_rounded, label: produit.nomCarton!),
-                  if (produit.nomDefaut != null) _AttrChip(icon: Icons.report_gmailerrorred_rounded, label: produit.nomDefaut!),
-                  if (produit.nomLieu != null) _AttrChip(icon: Icons.place_rounded, label: produit.nomLieu!),
-                  if (produit.nomFrns != null) _AttrChip(icon: Icons.local_shipping_rounded, label: produit.nomFrns!),
+                  if (!restrictedInfo && produit.nomCarton != null) _AttrChip(icon: Icons.inventory_rounded, label: produit.nomCarton!),
+                  if (!restrictedInfo && produit.nomDefaut != null) _AttrChip(icon: Icons.report_gmailerrorred_rounded, label: produit.nomDefaut!),
+                  if (!restrictedInfo && produit.nomLieu != null) _AttrChip(icon: Icons.place_rounded, label: produit.nomLieu!),
+                  if (!restrictedInfo && produit.nomFrns != null) _AttrChip(icon: Icons.local_shipping_rounded, label: produit.nomFrns!),
                   if (produit.imei1 != null) _AttrChip(icon: Icons.fingerprint_rounded, label: 'IMEI1: ${produit.imei1}'),
                   if (produit.imei2 != null) _AttrChip(icon: Icons.fingerprint_rounded, label: 'IMEI2: ${produit.imei2}'),
                 ],
               ),
-              if (produit.description != null && produit.description!.trim().isNotEmpty) ...[
+              if (!restrictedInfo && produit.description != null && produit.description!.trim().isNotEmpty) ...[
                 const SizedBox(height: 22),
                 Text('Description', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                 const SizedBox(height: 8),

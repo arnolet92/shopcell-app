@@ -197,7 +197,40 @@ class ProduitGroup {
     final groups = map.entries
         .map((e) => ProduitGroup(designation: e.value.first.designation, items: e.value))
         .toList();
-    groups.sort((a, b) => a.designation.toLowerCase().compareTo(b.designation.toLowerCase()));
+    groups.sort((a, b) => _compareAlphaBeforeDigits(a.designation.toLowerCase(), b.designation.toLowerCase()));
     return groups;
+  }
+
+  static bool _isDigitAt(String s, int i) {
+    if (i >= s.length) return false;
+    final c = s.codeUnitAt(i);
+    return c >= 0x30 && c <= 0x39;
+  }
+
+  /// Même règle de tri que côté web (`tabproduit2.php`) : les désignations
+  /// commençant par une lettre passent avant celles commençant par un
+  /// chiffre, puis tri "naturel" (numérique) à l'intérieur de chaque groupe
+  /// pour que "2" passe avant "10" au lieu d'un tri alphabétique strict.
+  static int _compareAlphaBeforeDigits(String a, String b) {
+    final aDigit = _isDigitAt(a, 0);
+    final bDigit = _isDigitAt(b, 0);
+    if (aDigit != bDigit) return aDigit ? 1 : -1;
+    return _naturalCompare(a, b);
+  }
+
+  static final RegExp _runRegExp = RegExp(r'\d+|\D+');
+
+  static int _naturalCompare(String a, String b) {
+    final ra = _runRegExp.allMatches(a).map((m) => m.group(0)!).toList();
+    final rb = _runRegExp.allMatches(b).map((m) => m.group(0)!).toList();
+    final len = ra.length < rb.length ? ra.length : rb.length;
+    for (var i = 0; i < len; i++) {
+      final sa = ra[i], sb = rb[i];
+      final na = int.tryParse(sa);
+      final nb = int.tryParse(sb);
+      final cmp = (na != null && nb != null) ? na.compareTo(nb) : sa.compareTo(sb);
+      if (cmp != 0) return cmp;
+    }
+    return ra.length.compareTo(rb.length);
   }
 }

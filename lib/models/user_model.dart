@@ -41,6 +41,13 @@ class UserModel {
   /// JSON brut de session qui porte la clé `id_user`.
   Map<String, dynamic> get mobPayload => {'id': idUser, 'pseudo': pseudo};
 
+  /// Rôles ayant accès à toutes les informations d'un article (prix d'achat,
+  /// prix de revient, capacité, couleur, carton, défaut, stockage,
+  /// fournisseur, description...) dans "Gestion d'article". Les autres
+  /// comptes n'y voient que : prix de vente, modèle, série, IMEI 1/2 et
+  /// batterie.
+  bool get hasFullArticleAccess => const {'patron', 'gerant', 'magasinier'}.contains(role);
+
   String get roleLabel {
     switch (role) {
       case 'patron':

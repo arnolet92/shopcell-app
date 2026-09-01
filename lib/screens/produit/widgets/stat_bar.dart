@@ -11,11 +11,15 @@ class StatBar extends StatelessWidget {
     required this.nbArticles,
     required this.valeurStock,
     required this.valeurAchat,
+    this.restrictedInfo = false,
   });
 
   final int nbArticles;
   final double valeurStock;
   final double valeurAchat;
+  /// Comptes hors patron/gérant/magasinier : masque les valeurs de stock
+  /// (dérivées du prix d'achat/prix de vente), ne garde que le nombre d'articles.
+  final bool restrictedInfo;
 
   String _fmt(double v) {
     final s = v.round().toString();
@@ -35,10 +39,12 @@ class StatBar extends StatelessWidget {
       child: Row(
         children: [
           _StatChip(icon: Icons.inventory_2_rounded, color: AppColors.accentLight, label: 'ARTICLES', value: '$nbArticles'),
-          const SizedBox(width: 10),
-          _StatChip(icon: Icons.stacked_line_chart_rounded, color: AppColors.green, label: 'VALEUR STOCK', value: '${_fmt(valeurStock)} Ar'),
-          const SizedBox(width: 10),
-          _StatChip(icon: Icons.shopping_bag_rounded, color: AppColors.blue, label: "VALEUR D'ACHAT", value: '${_fmt(valeurAchat)} Ar'),
+          if (!restrictedInfo) ...[
+            const SizedBox(width: 10),
+            _StatChip(icon: Icons.stacked_line_chart_rounded, color: AppColors.green, label: 'VALEUR STOCK', value: '${_fmt(valeurStock)} Ar'),
+            const SizedBox(width: 10),
+            _StatChip(icon: Icons.shopping_bag_rounded, color: AppColors.blue, label: "VALEUR D'ACHAT", value: '${_fmt(valeurAchat)} Ar'),
+          ],
         ],
       ),
     );
