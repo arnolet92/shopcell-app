@@ -68,44 +68,46 @@ class PdfTicketBuilder {
     final dateStr = dateFacture ??
         '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
 
+    // pw.MultiPage (et non pw.Page) : une facture avec beaucoup d'articles
+    // (tableau détaillé modèle/série/capacité/couleur/IMEI par ligne) peut
+    // dépasser la hauteur d'une page A4 — avec pw.Page (page fixe unique),
+    // tout ce qui dépasse est silencieusement coupé (le pied de page avec
+    // garantie/signatures disparaissait). pw.MultiPage fait automatiquement
+    // déborder le contenu (y compris le tableau lui-même) sur une page
+    // suivante plutôt que de le tronquer.
     doc.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(26),
-        build: (context) => pw.Stack(
-          children: [
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _header(
-                  shopName: shopName,
-                  shopAddress: shopAddress,
-                  shopLieu: shopLieu,
-                  shopNif: shopNif,
-                  shopStat: shopStat,
-                  shopPhone: shopPhone,
-                  shopPhone2: shopPhone2,
-                  shopPhoneMobile: shopPhoneMobile,
-                  shopEmail: shopEmail,
-                  shopFacebook: shopFacebook,
-                  shopInstagram: shopInstagram,
-                  logo: logo,
-                  dateStr: dateStr,
-                  numeroFacture: numeroFacture,
-                  clientNom: clientNom,
-                  clientPrenom: clientPrenom,
-                  clientTelephone: clientTelephone,
-                  clientCin: clientCin,
-                ),
-                pw.SizedBox(height: 10),
-                _articlesTable(lines: lines, total: total),
-                pw.SizedBox(height: 10),
-                _garantieEtSignature(),
-              ],
-            ),
-            if (isCopie) pw.Positioned.fill(child: _copieWatermark()),
-          ],
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(26),
+          buildForeground: isCopie ? (context) => _copieWatermark() : null,
         ),
+        build: (context) => [
+          _header(
+            shopName: shopName,
+            shopAddress: shopAddress,
+            shopLieu: shopLieu,
+            shopNif: shopNif,
+            shopStat: shopStat,
+            shopPhone: shopPhone,
+            shopPhone2: shopPhone2,
+            shopPhoneMobile: shopPhoneMobile,
+            shopEmail: shopEmail,
+            shopFacebook: shopFacebook,
+            shopInstagram: shopInstagram,
+            logo: logo,
+            dateStr: dateStr,
+            numeroFacture: numeroFacture,
+            clientNom: clientNom,
+            clientPrenom: clientPrenom,
+            clientTelephone: clientTelephone,
+            clientCin: clientCin,
+          ),
+          pw.SizedBox(height: 10),
+          _articlesTable(lines: lines, total: total),
+          pw.SizedBox(height: 10),
+          _garantieEtSignature(),
+        ],
       ),
     );
 

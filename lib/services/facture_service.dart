@@ -56,6 +56,30 @@ class FactureService {
     final success = data['success'] == true;
     return FactureActionResult(success: success, message: data['message']?.toString());
   }
+
+  /// Modifie le client rattaché à une facture payée (nom/prénom/téléphone/
+  /// CIN), ou lui en rattache un nouveau — depuis l'écran "Factures payées",
+  /// avant impression (voir Mob::update_client_facture()).
+  Future<FactureActionResult> updateClientFacture({
+    required String idClient,
+    required String nom,
+    String? prenom,
+    String? telephone,
+    String? cin,
+    bool nouveau = false,
+  }) async {
+    final data = await ApiClient.instance.post('update_client_facture', fields: {
+      'id_client': idClient,
+      'nom': nom,
+      if (prenom != null && prenom.trim().isNotEmpty) 'prenom': prenom.trim(),
+      if (telephone != null && telephone.trim().isNotEmpty) 'telephone': telephone.trim(),
+      if (cin != null && cin.trim().isNotEmpty) 'cin': cin.trim(),
+      if (nouveau) 'nouveau': '1',
+    });
+    if (data is! Map) return FactureActionResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return FactureActionResult(success: !error, message: data['msg']?.toString());
+  }
 }
 
 class FactureActionResult {

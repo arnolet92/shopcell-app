@@ -8,6 +8,7 @@ import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
 import '../../services/receipt_print_service.dart';
+import '../../widgets/inline_field.dart';
 
 String _fmt(double v) {
   final s = v.round().toString();
@@ -32,8 +33,11 @@ class FactureDetailScreen extends StatefulWidget {
     required this.numeroFacture,
     required this.mode,
     required this.user,
+    this.personnesId,
     this.clientNom,
+    this.clientPrenom,
     this.clientTelephone,
+    this.clientCin,
     this.dateFacture,
     this.caissierPseudo,
   });
@@ -43,8 +47,11 @@ class FactureDetailScreen extends StatefulWidget {
   final UserModel user;
   /// Renseignés depuis `FactureListItem` (voir `FactureListScreen`), pour
   /// l'en-tête du reçu imprimé — pas de round-trip serveur supplémentaire.
+  final String? personnesId;
   final String? clientNom;
+  final String? clientPrenom;
   final String? clientTelephone;
+  final String? clientCin;
   final String? dateFacture;
   final String? caissierPseudo;
 
@@ -57,6 +64,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
   bool _loading = true;
   String? _error;
   bool _changed = false;
+
+  // Infos client modifiables depuis le sheet affiché avant impression
+  // (voir _editClientAndPrint) — initialisées depuis ce que la liste a
+  // transmis, mises à jour localement après un enregistrement réussi.
+  late String? _personnesId = widget.personnesId;
+  late String? _clientNom = widget.clientNom;
+  late String? _clientPrenom = widget.clientPrenom;
+  late String? _clientTelephone = widget.clientTelephone;
+  late String? _clientCin = widget.clientCin;
 
   bool get _peutAnnuler =>
       widget.mode == FactureListMode.payee && (widget.user.role == 'patron' || widget.user.role == 'gerant');
@@ -127,21 +143,72 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
 
   bool _printing = false;
 
+  /// Étape obligatoire avant impression : affiche les infos du client
+  /// (nom/prénom/téléphone/CIN) — modifiables, ou remplaçables par un
+  /// nouveau client — puis enregistre et lance l'impression.
+  Future<void> _editClientAndPrint() async {
+    if (_detail == null || _printing) return;
+    final saisie = await showModalBottomSheet<_ClientInfoResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (_) => _ClientInfoSheet(
+        nomInitial: _clientNom,
+        prenomInitial: _clientPrenom,
+        telephoneInitial: _clientTelephone,
+        cinInitial: _clientCin,
+        aDejaUnClient: _personnesId != null,
+      ),
+    );
+    if (saisie == null || !mounted) return;
+
+    setState(() => _printing = true);
+    final result = await FactureService.instance.updateClientFacture(
+      idClient: widget.idClient,
+      nom: saisie.nom,
+      prenom: saisie.prenom,
+      telephone: saisie.telephone,
+      cin: saisie.cin,
+      nouveau: saisie.nouveau || _personnesId == null,
+    );
+    if (!mounted) return;
+    if (!result.success) {
+      setState(() => _printing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message ?? "Impossible d'enregistrer les infos du client.")),
+      );
+      return;
+    }
+    setState(() {
+      _clientNom = saisie.nom;
+      _clientPrenom = saisie.prenom;
+      _clientTelephone = saisie.telephone;
+      _clientCin = saisie.cin;
+      _personnesId ??= 'rattaché'; // un client existe désormais pour cette facture
+      _changed = true;
+    });
+    await _print();
+  }
+
   /// Réimpression d'une facture déjà payée — même système que l'écran
   /// d'encaissement (`PaymentScreen`/`ReceiptPrintService`) : ticket
   /// thermique, PDF A4, ou partage du PDF.
   Future<void> _print() async {
-    if (_detail == null || _printing) return;
     final lines = [..._detail!.actifs, ..._detail!.offerts].map(ReceiptLine.fromFactureArticle).toList();
-    if (lines.isEmpty) return;
-    setState(() => _printing = true);
+    if (lines.isEmpty) {
+      setState(() => _printing = false);
+      return;
+    }
     final message = await ReceiptPrintService.instance.offerPrint(
       context,
       lines: lines,
       total: _detail!.totalWithRemise,
       cashierName: widget.caissierPseudo,
-      clientName: widget.clientNom,
-      clientTelephone: widget.clientTelephone,
+      clientName: _clientNom,
+      clientPrenom: _clientPrenom,
+      clientTelephone: _clientTelephone,
+      clientCin: _clientCin,
       numeroFacture: widget.numeroFacture,
       dateFacture: widget.dateFacture,
       isCopie: true,
@@ -170,7 +237,7 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
             if (_detail != null && (_detail!.actifs.isNotEmpty || _detail!.offerts.isNotEmpty))
               Padding(
                 padding: const EdgeInsets.only(right: 14),
-                child: _PrintPillButton(loading: _printing, onTap: _print),
+                child: _PrintPillButton(loading: _printing, onTap: _editClientAndPrint),
               ),
           ],
         ),
@@ -513,6 +580,141 @@ class _PrintPillButton extends StatelessWidget {
                     ),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClientInfoResult {
+  _ClientInfoResult({required this.nom, this.prenom, this.telephone, this.cin, required this.nouveau});
+  final String nom;
+  final String? prenom;
+  final String? telephone;
+  final String? cin;
+  final bool nouveau;
+}
+
+/// Affiché avant toute impression depuis "Factures payées" : infos du
+/// client (nom/prénom/téléphone/CIN), pré-remplies, modifiables — ou
+/// remplaçables par un nouveau client via l'interrupteur dédié.
+class _ClientInfoSheet extends StatefulWidget {
+  const _ClientInfoSheet({
+    this.nomInitial,
+    this.prenomInitial,
+    this.telephoneInitial,
+    this.cinInitial,
+    required this.aDejaUnClient,
+  });
+  final String? nomInitial;
+  final String? prenomInitial;
+  final String? telephoneInitial;
+  final String? cinInitial;
+  final bool aDejaUnClient;
+
+  @override
+  State<_ClientInfoSheet> createState() => _ClientInfoSheetState();
+}
+
+class _ClientInfoSheetState extends State<_ClientInfoSheet> {
+  late final _nomCtrl = TextEditingController(text: widget.nomInitial ?? '');
+  late final _prenomCtrl = TextEditingController(text: widget.prenomInitial ?? '');
+  late final _telephoneCtrl = TextEditingController(text: widget.telephoneInitial ?? '');
+  late final _cinCtrl = TextEditingController(text: widget.cinInitial ?? '');
+  bool _nouveau = false;
+
+  @override
+  void dispose() {
+    _nomCtrl.dispose();
+    _prenomCtrl.dispose();
+    _telephoneCtrl.dispose();
+    _cinCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final nom = _nomCtrl.text.trim();
+    if (nom.isEmpty) return;
+    Navigator.of(context).pop(_ClientInfoResult(
+      nom: nom,
+      prenom: _prenomCtrl.text.trim().isEmpty ? null : _prenomCtrl.text.trim(),
+      telephone: _telephoneCtrl.text.trim().isEmpty ? null : _telephoneCtrl.text.trim(),
+      cin: _cinCtrl.text.trim().isEmpty ? null : _cinCtrl.text.trim(),
+      nouveau: _nouveau,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Informations du client', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+            const SizedBox(height: 4),
+            Text(
+              'Vérifiez ou complétez avant impression.',
+              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 16),
+            InlineField(label: 'Nom', controller: _nomCtrl, prefixIcon: Icons.badge_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.person_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'Téléphone', controller: _telephoneCtrl, prefixIcon: Icons.phone_rounded),
+            const SizedBox(height: 12),
+            InlineField(label: 'N°CIN', controller: _cinCtrl, prefixIcon: Icons.credit_card_rounded),
+            if (widget.aDejaUnClient) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(10)),
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Remplacer par un nouveau client', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  subtitle: Text(
+                    _nouveau ? 'Un nouveau client sera créé et rattaché à cette facture.' : 'Ces informations mettront à jour le client déjà rattaché.',
+                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                  value: _nouveau,
+                  activeThumbColor: AppColors.accentLight,
+                  onChanged: (v) => setState(() => _nouveau = v),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Enregistrer et imprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -14,8 +14,11 @@ class FactureListItem {
     required this.idClient,
     required this.numeroFacture,
     this.referenceClient,
+    this.personnesId,
     this.nomComplet,
     this.telephone,
+    this.prenomPersonnes,
+    this.cinPersonnes,
     this.nomVisiteur,
     this.prenomVisiteur,
     this.telephoneVisiteur,
@@ -28,8 +31,13 @@ class FactureListItem {
   final String idClient;
   final String numeroFacture;
   final String? referenceClient;
+  /// Client déjà rattaché à cette facture (`client.personnes_id`), s'il y
+  /// en a un — null pour un visiteur de passage.
+  final String? personnesId;
   final String? nomComplet;
   final String? telephone;
+  final String? prenomPersonnes;
+  final String? cinPersonnes;
   final String? nomVisiteur;
   final String? prenomVisiteur;
   final String? telephoneVisiteur;
@@ -57,8 +65,11 @@ class FactureListItem {
       idClient: '${j['id_client'] ?? ''}',
       numeroFacture: _s(j['numero_facture']) ?? '-',
       referenceClient: _s(j['reference_client']),
+      personnesId: _s(j['personnes_id']),
       nomComplet: _s(j['nom_complet']),
       telephone: _s(j['telephone']),
+      prenomPersonnes: _s(j['prenom_personnes']),
+      cinPersonnes: _s(j['cin_personnes']),
       nomVisiteur: _s(j['nom_visiteur']),
       prenomVisiteur: _s(j['prenom_visiteur']),
       telephoneVisiteur: _s(j['telephone_visiteur']),
