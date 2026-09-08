@@ -143,11 +143,42 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
 
   bool _printing = false;
 
-  /// Étape obligatoire avant impression : affiche les infos du client
-  /// (nom/prénom/téléphone/CIN) — modifiables, ou remplaçables par un
-  /// nouveau client — puis enregistre et lance l'impression.
+  /// Demande si l'impression est l'original (aucun filigrane) ou une copie
+  /// (filigrane "FACTURE COPIE") — retourne null si l'utilisateur annule.
+  Future<bool?> _demanderOriginalOuCopie() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Impression', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        content: const Text(
+          "S'agit-il de l'original ou d'une copie ?",
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler', style: TextStyle(color: AppColors.textMuted))),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Original', style: TextStyle(color: AppColors.accentLight, fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Copie', style: TextStyle(color: AppColors.orange, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Étape obligatoire avant impression : demande d'abord original/copie,
+  /// puis affiche les infos du client (nom/prénom/téléphone/CIN) —
+  /// modifiables, ou remplaçables par un nouveau client — puis enregistre et
+  /// lance l'impression.
   Future<void> _editClientAndPrint() async {
     if (_detail == null || _printing) return;
+    final isCopie = await _demanderOriginalOuCopie();
+    if (isCopie == null || !mounted) return;
+
     final saisie = await showModalBottomSheet<_ClientInfoResult>(
       context: context,
       isScrollControlled: true,
@@ -188,13 +219,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       _personnesId ??= 'rattaché'; // un client existe désormais pour cette facture
       _changed = true;
     });
-    await _print();
+    await _print(isCopie: isCopie);
   }
 
   /// Réimpression d'une facture déjà payée — même système que l'écran
   /// d'encaissement (`PaymentScreen`/`ReceiptPrintService`) : ticket
-  /// thermique, PDF A4, ou partage du PDF.
-  Future<void> _print() async {
+  /// thermique, PDF A4, ou partage du PDF. Le filigrane "FACTURE COPIE" ne
+  /// s'applique que si l'utilisateur a répondu "Copie" à la question
+  /// posée avant impression (voir _demanderOriginalOuCopie).
+  Future<void> _print({required bool isCopie}) async {
     final lines = [..._detail!.actifs, ..._detail!.offerts].map(ReceiptLine.fromFactureArticle).toList();
     if (lines.isEmpty) {
       setState(() => _printing = false);
@@ -211,7 +244,7 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       clientCin: _clientCin,
       numeroFacture: widget.numeroFacture,
       dateFacture: widget.dateFacture,
-      isCopie: true,
+      isCopie: isCopie,
     );
     if (!mounted) return;
     setState(() => _printing = false);

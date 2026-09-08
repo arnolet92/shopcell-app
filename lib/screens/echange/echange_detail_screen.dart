@@ -49,6 +49,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   final _produitSearchCtrl = TextEditingController();
   final _prixAjouteCtrl = TextEditingController();
   final _motifCtrl = TextEditingController();
+  final _batterieCtrl = TextEditingController();
   Timer? _debounceProduit;
   List<ProduitModel> _produitResults = [];
   ProduitModel? _selectedProduit;
@@ -83,6 +84,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     _produitSearchCtrl.dispose();
     _prixAjouteCtrl.dispose();
     _motifCtrl.dispose();
+    _batterieCtrl.dispose();
     _montantCtrl.dispose();
     _debounceProduit?.cancel();
     super.dispose();
@@ -95,6 +97,17 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _facture = facture;
       _loading = false;
     });
+    // Pré-remplit avec la batterie actuelle de l'article retourné (modifiable
+    // ensuite) — n'apparaît que si "avec défaut" est activé.
+    final lignes = (facture?['lignes'] as List?) ?? [];
+    final ligne = lignes.cast<Map<String, dynamic>?>().firstWhere(
+          (l) => '${l?['id_ventes']}' == widget.idVentes,
+          orElse: () => null,
+        );
+    final batterieActuelle = ligne?['nom_sous_categorie_piece']?.toString().trim();
+    if (batterieActuelle != null && batterieActuelle.isNotEmpty) {
+      _batterieCtrl.text = batterieActuelle;
+    }
   }
 
   Map<String, dynamic>? get _entete => _facture?['entete'] as Map<String, dynamic>?;
@@ -206,6 +219,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       prixAjoute: prixAjoute,
       isDefaut: _isDefaut,
       motifReparation: _isDefaut ? _motifCtrl.text : null,
+      batterie: _isDefaut ? _batterieCtrl.text : null,
       user: widget.user,
       paiements: _effectiveSplits,
     );
@@ -484,6 +498,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         if (_isDefaut) ...[
           const SizedBox(height: 12),
           InlineField(label: 'Motif de la réparation', controller: _motifCtrl, prefixIcon: Icons.build_rounded),
+          const SizedBox(height: 12),
+          InlineField(label: "Batterie de l'article retourné", controller: _batterieCtrl, prefixIcon: Icons.battery_full_rounded),
         ],
       ],
     );

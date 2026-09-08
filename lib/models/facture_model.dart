@@ -95,6 +95,7 @@ class FactureDetailArticle {
     this.nomLieu,
     this.nomMarque,
     this.nomTypePiece,
+    this.nomBatterie,
     this.accompagnement,
     this.prixUnitaire,
     this.montant,
@@ -114,6 +115,8 @@ class FactureDetailArticle {
   final String? nomMarque;
   /// "Couleur" (nom_couleur, idem).
   final String? nomTypePiece;
+  /// "Batterie" (nom_batterie, idem).
+  final String? nomBatterie;
   final String? accompagnement;
   final double? prixUnitaire;
   final double? montant;
@@ -134,6 +137,7 @@ class FactureDetailArticle {
         nomLieu: _s(j['nom_lieu']),
         nomMarque: _s(j['nom_capacite']),
         nomTypePiece: _s(j['nom_couleur']),
+        nomBatterie: _s(j['nom_batterie']),
         accompagnement: _s(j['accompagnement']),
         prixUnitaire: _d(j['prix_ventes']),
         montant: _d(j['total_recette']),

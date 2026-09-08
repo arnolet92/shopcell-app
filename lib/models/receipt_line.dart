@@ -17,6 +17,7 @@ class ReceiptLine {
     this.nomModel,
     this.nomMarque,
     this.nomTypePiece,
+    this.nomSousCategoriePiece,
   });
 
   final String designation;
@@ -29,6 +30,8 @@ class ReceiptLine {
   final String? nomModel;
   final String? nomMarque;
   final String? nomTypePiece;
+  /// "Batterie".
+  final String? nomSousCategoriePiece;
 
   factory ReceiptLine.fromProduit(ProduitModel produit, {required double qte}) => ReceiptLine(
         designation: produit.designation,
@@ -41,6 +44,7 @@ class ReceiptLine {
         nomModel: produit.nomModel,
         nomMarque: produit.nomMarque,
         nomTypePiece: produit.nomTypePiece,
+        nomSousCategoriePiece: produit.nomSousCategoriePiece,
       );
 
   factory ReceiptLine.fromFactureArticle(FactureDetailArticle article) => ReceiptLine(
@@ -54,5 +58,6 @@ class ReceiptLine {
         nomModel: article.nomModel,
         nomMarque: article.nomMarque,
         nomTypePiece: article.nomTypePiece,
+        nomSousCategoriePiece: article.nomBatterie,
       );
 }

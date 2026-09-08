@@ -164,6 +164,7 @@ class EchangeService {
     required double prixAjoute,
     required bool isDefaut,
     String? motifReparation,
+    String? batterie,
     required UserModel user,
     required List<PaymentSplit> paiements,
   }) async {
@@ -180,6 +181,9 @@ class EchangeService {
     };
     if (motifReparation != null && motifReparation.trim().isNotEmpty) {
       fields['motif_reparation'] = motifReparation.trim();
+    }
+    if (batterie != null && batterie.trim().isNotEmpty) {
+      fields['batterie'] = batterie.trim();
     }
     final data = await ApiClient.instance.post('echange_valider', fields: fields);
     if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');

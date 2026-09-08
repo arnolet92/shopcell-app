@@ -23,6 +23,21 @@ class PdfTicketBuilder {
     return '${buf.toString()} Ar';
   }
 
+  static String _p2(int n) => n.toString().padLeft(2, '0');
+
+  /// `dateFacture` vient du serveur sous forme de datetime SQL brut
+  /// ("2026-09-08 14:23:00") — on le reformate systématiquement en
+  /// jour-mois-année plutôt que de l'afficher tel quel.
+  static String _formatDateDMY(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      final now = DateTime.now();
+      return '${_p2(now.day)}-${_p2(now.month)}-${now.year}';
+    }
+    final dt = DateTime.tryParse(raw.trim());
+    if (dt == null) return raw.trim();
+    return '${_p2(dt.day)}-${_p2(dt.month)}-${dt.year}';
+  }
+
   static const _labelStyle = pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold);
   static const _valueStyle = pw.TextStyle(fontSize: 9.5);
 
@@ -64,9 +79,7 @@ class PdfTicketBuilder {
       }
     }
 
-    final now = DateTime.now();
-    final dateStr = dateFacture ??
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    final dateStr = _formatDateDMY(dateFacture);
 
     // pw.MultiPage (et non pw.Page) : une facture avec beaucoup d'articles
     // (tableau détaillé modèle/série/capacité/couleur/IMEI par ligne) peut
@@ -300,8 +313,8 @@ class PdfTicketBuilder {
 
   static pw.Widget _articlesTable({required List<ReceiptLine> lines, required double total}) {
     pw.Widget cell(String text, {bool bold = false, pw.TextAlign align = pw.TextAlign.left}) => pw.Padding(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: pw.Text(text, style: pw.TextStyle(fontSize: 9.5, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal), textAlign: align),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          child: pw.Text(text, style: pw.TextStyle(fontSize: 9, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal), textAlign: align),
         );
 
     final rows = <pw.TableRow>[
@@ -317,20 +330,23 @@ class PdfTicketBuilder {
     ];
 
     for (final line in lines) {
-      final champs = <String>[
-        'Nom du Modèle     :  ${line.designation}',
-        'N° du Modèle      :  ${line.nomModel ?? ''}',
-        'N° de SERIE       :  ${line.numSerie ?? ''}',
-        'Capacité          :  ${line.nomMarque ?? ''}',
-        'Couleur           :  ${line.nomTypePiece ?? ''}',
-        'IMEI I            :  ${line.imei1 ?? ''}',
-        'IMEI II           :  ${line.imei2 ?? ''}',
-        'Défaut            :  ',
-      ].join('\n');
+      // Seules les valeurs réellement renseignées sont affichées — une
+      // ligne "N° de SERIE :" vide sur chaque article gaspillait du papier.
+      final paires = <List<String>>[
+        ['Modèle', line.designation],
+        ['N° du modèle', line.nomModel ?? ''],
+        ['N° de série', line.numSerie ?? ''],
+        ['Capacité', line.nomMarque ?? ''],
+        ['Couleur', line.nomTypePiece ?? ''],
+        ['Batterie', line.nomSousCategoriePiece ?? ''],
+        ['IMEI 1', line.imei1 ?? ''],
+        ['IMEI 2', line.imei2 ?? ''],
+      ].where((p) => p[1].trim().isNotEmpty).toList();
+      final champs = paires.map((p) => '${p[0]} : ${p[1]}').join('\n');
 
       rows.add(pw.TableRow(
         children: [
-          pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4), child: pw.Text(champs, style: const pw.TextStyle(fontSize: 9))),
+          pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3), child: pw.Text(champs, style: const pw.TextStyle(fontSize: 8.2))),
           cell(line.qte.toStringAsFixed(line.qte == line.qte.roundToDouble() ? 0 : 2), align: pw.TextAlign.center),
           cell(_money(line.prixUnitaire), align: pw.TextAlign.right),
           cell(_money(line.total), align: pw.TextAlign.right),
@@ -344,7 +360,7 @@ class PdfTicketBuilder {
         pw.Table(
           border: pw.TableBorder.all(width: 0.6),
           columnWidths: const {
-            0: pw.FlexColumnWidth(6),
+            0: pw.FlexColumnWidth(5),
             1: pw.FlexColumnWidth(1.2),
             2: pw.FlexColumnWidth(1.6),
             3: pw.FlexColumnWidth(1.8),
@@ -369,9 +385,22 @@ class PdfTicketBuilder {
   static pw.Widget _garantieEtSignature() {
     const small = pw.TextStyle(fontSize: 8);
     const smallBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+    // Point dessiné en vectoriel (petit disque) plutôt que le caractère "•" :
+    // ce glyphe n'est pas garanti par la police PDF par défaut et s'affichait
+    // comme un carré barré d'une croix (glyphe manquant) sur certains
+    // lecteurs/imprimantes.
     pw.Widget puce(String text, {pw.TextStyle style = small}) => pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 1.5),
-          child: pw.Text('•  $text', style: style),
+          padding: const pw.EdgeInsets.only(bottom: 2),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 3.2, right: 5),
+                child: pw.Container(width: 2.6, height: 2.6, decoration: const pw.BoxDecoration(shape: pw.BoxShape.circle, color: PdfColors.black)),
+              ),
+              pw.Expanded(child: pw.Text(text, style: style)),
+            ],
+          ),
         );
 
     return pw.Column(
@@ -406,6 +435,8 @@ class PdfTicketBuilder {
         puce("Le mobile modifié ou réparé par le client lui-même ou par une tierce personne"),
         puce("Dommage ou dysfonctionnement de l'écran"),
         puce("Les dommages dus à une cause extérieure : choc, dégâts des eaux, tension électrique"),
+        puce("La batterie (usure normale et perte de capacité avec le temps)"),
+        puce("Les accessoires fournis (chargeur, câble, écouteurs, coque, etc.)"),
         pw.SizedBox(height: 6),
         pw.Text('nb : Veuillez tester et vérifier votre produit avant de partir', style: smallBold),
         pw.Text(
