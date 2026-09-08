@@ -412,7 +412,7 @@ class PdfTicketBuilder {
           style: small,
         ),
         pw.SizedBox(height: 8),
-        pw.Text('ÉTAT DE LA BATTERIE :', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.red, decoration: pw.TextDecoration.underline)),
+        pw.Text('ÉTAT DE LA BATTERIE (CAPACITÉ MAXIMUM, EXCLUSION DE GARANTIE) :', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.red, decoration: pw.TextDecoration.underline)),
         pw.Text(
           "Pour un iPhone datant d'environ un an ou plus, il est fort probable que la capacité de la batterie soit moins de 90% voire même moins de 80%. "
           "Si elle affiche près de 100%, cela signifie qu'elle a été changée ou boostée (reconditionnée).",

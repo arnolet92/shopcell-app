@@ -61,7 +61,17 @@ class ReceiptPrintService {
     await Future.delayed(const Duration(milliseconds: 300));
 
     if (choice == 'ticket') {
-      return _printTicket(lines: lines, total: total, cashierName: cashierName, clientName: clientName, paiements: paiements);
+      return _printTicket(
+        lines: lines,
+        total: total,
+        cashierName: cashierName,
+        clientName: clientName,
+        clientPrenom: clientPrenom,
+        clientTelephone: clientTelephone,
+        paiements: paiements,
+        numeroFacture: numeroFacture,
+        dateFacture: dateFacture,
+      );
     }
 
     try {
@@ -92,7 +102,11 @@ class ReceiptPrintService {
     required double total,
     String? cashierName,
     String? clientName,
+    String? clientPrenom,
+    String? clientTelephone,
     List<PaymentSplit>? paiements,
+    String? numeroFacture,
+    String? dateFacture,
   }) async {
     try {
       final shopInfo = await VenteService.instance.loadShopInfo();
@@ -110,6 +124,10 @@ class ReceiptPrintService {
         total: total,
         paiements: paiements,
         clientName: clientName,
+        clientPrenom: clientPrenom,
+        clientTelephone: clientTelephone,
+        numeroFacture: numeroFacture,
+        dateFacture: dateFacture,
       );
       final result = await PrinterService.instance.printBytes(bytes);
       return result.success ? '(Ticket imprimé.)' : '(Impression échouée : ${result.message ?? 'imprimante non configurée'})';

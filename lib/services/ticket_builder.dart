@@ -24,10 +24,17 @@ class TicketBuilder {
     required double total,
     List<PaymentSplit>? paiements,
     String? clientName,
+    String? clientPrenom,
+    String? clientTelephone,
+    String? numeroFacture,
+    String? dateFacture,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm58, profile);
     final now = DateTime.now();
+    final dateStr = dateFacture ??
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final bytes = <int>[];
 
     bytes.addAll(generator.text(
@@ -42,13 +49,17 @@ class TicketBuilder {
       }
     }
     bytes.addAll(generator.hr());
-    bytes.addAll(generator.text(
-      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
-      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-    ));
+    if (numeroFacture != null && numeroFacture.trim().isNotEmpty) {
+      bytes.addAll(generator.text('Facture N° : $numeroFacture', styles: const PosStyles(bold: true)));
+    }
+    bytes.addAll(generator.text(dateStr));
     bytes.addAll(generator.text('Caissier : $cashierName'));
-    if (clientName != null && clientName.trim().isNotEmpty) {
-      bytes.addAll(generator.text('Client : $clientName'));
+    final clientComplet = [clientName, clientPrenom].where((s) => s != null && s.trim().isNotEmpty).join(' ');
+    if (clientComplet.isNotEmpty) {
+      bytes.addAll(generator.text('Client : $clientComplet'));
+    }
+    if (clientTelephone != null && clientTelephone.trim().isNotEmpty) {
+      bytes.addAll(generator.text('Tél : $clientTelephone'));
     }
     bytes.addAll(generator.hr());
 
@@ -77,10 +88,21 @@ class TicketBuilder {
         PosColumn(text: 'Montant donné', width: 6),
         PosColumn(text: _money(montantDonne), width: 6, styles: const PosStyles(align: PosAlign.right)),
       ]));
-      bytes.addAll(generator.row([
-        PosColumn(text: 'Monnaie', width: 6),
-        PosColumn(text: _money(montantDonne - total), width: 6, styles: const PosStyles(align: PosAlign.right)),
-      ]));
+      // "Rendu" si le client a payé plus que le total (monnaie à lui rendre),
+      // "Reste à payer" s'il a payé moins (crédit) — jamais les deux, et
+      // jamais un montant négatif affiché comme si c'était de la monnaie.
+      final diff = montantDonne - total;
+      if (diff > 0.01) {
+        bytes.addAll(generator.row([
+          PosColumn(text: 'Rendu', width: 6, styles: const PosStyles(bold: true)),
+          PosColumn(text: _money(diff), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        ]));
+      } else if (diff < -0.01) {
+        bytes.addAll(generator.row([
+          PosColumn(text: 'Reste à payer', width: 6, styles: const PosStyles(bold: true)),
+          PosColumn(text: _money(-diff), width: 6, styles: const PosStyles(align: PosAlign.right, bold: true)),
+        ]));
+      }
     }
 
     bytes.addAll(generator.feed(1));
