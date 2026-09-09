@@ -33,6 +33,7 @@ class ProduitModel {
     this.isReparationProduits = false,
     this.motifReparationProduits,
     this.isRepareeProduits = false,
+    this.produitApresEchange = false,
   });
 
   final String idProduits;
@@ -62,6 +63,9 @@ class ProduitModel {
   final bool isReparationProduits; // actuellement en réparation
   final String? motifReparationProduits;
   final bool isRepareeProduits; // a déjà été réparé (historique)
+  /// Repris en échange, en attente de remise en stock explicite (voir
+  /// Produit/lst_apres_echange côté web).
+  final bool produitApresEchange;
 
   /// URL réelle de la photo, sur le même principe que
   /// `Media::get_url_file($id, $img, 'photo', 'produit', false)` côté web :
@@ -113,6 +117,7 @@ class ProduitModel {
       isReparationProduits: _d(json['isreparation_produits']) == 1,
       motifReparationProduits: _s(json['motif_reparation_produits']),
       isRepareeProduits: _d(json['isreparee_produits']) == 1,
+      produitApresEchange: _d(json['produit_apres_echange']) == 1,
     );
   }
 

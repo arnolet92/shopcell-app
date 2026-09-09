@@ -6,7 +6,7 @@ import '../models/produit_model.dart';
 /// `Produit::lst_attente()` (articles en attente de validation),
 /// `Produit::lst_vente()` (articles totalement épuisés),
 /// `Produit::lst_reparation()` (articles actuellement en réparation).
-enum ProduitVue { tous, attente, vente, reparation }
+enum ProduitVue { tous, attente, vente, reparation, apresEchange }
 
 class SaveProduitResult {
   SaveProduitResult({required this.success, this.message, this.idProduits});
@@ -44,6 +44,7 @@ class ProduitService {
         ProduitVue.attente => 'attente',
         ProduitVue.vente => 'vente',
         ProduitVue.reparation => 'reparation',
+        ProduitVue.apresEchange => 'apres_echange',
       },
     };
     if (recherche != null && recherche.trim().isNotEmpty) fields['arg'] = recherche.trim();
@@ -197,6 +198,15 @@ class ProduitService {
       'id_produits': idProduits,
       'motif': motif,
     });
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Remet un article "après échange" dans le circuit normal — équivalent
+  /// de `Produit::remettre_en_stock()`.
+  Future<SaveProduitResult> remettreEnStock({required String idProduits}) async {
+    final data = await ApiClient.instance.post('remettre_en_stock', fields: {'id_produits': idProduits});
     if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
     final error = data['error'] == true;
     return SaveProduitResult(success: !error, message: data['msg']?.toString());

@@ -332,21 +332,41 @@ class PdfTicketBuilder {
     for (final line in lines) {
       // Seules les valeurs réellement renseignées sont affichées — une
       // ligne "N° de SERIE :" vide sur chaque article gaspillait du papier.
+      // Regroupées deux par deux (côte à côte) plutôt qu'une par ligne, pour
+      // ne pas occuper trop de hauteur dans la colonne description.
+      const champStyle = pw.TextStyle(fontSize: 8);
       final paires = <List<String>>[
-        ['Modèle', line.designation],
         ['N° du modèle', line.nomModel ?? ''],
         ['N° de série', line.numSerie ?? ''],
         ['Capacité', line.nomMarque ?? ''],
         ['Couleur', line.nomTypePiece ?? ''],
-        ['Batterie', line.nomSousCategoriePiece ?? ''],
         ['IMEI 1', line.imei1 ?? ''],
         ['IMEI 2', line.imei2 ?? ''],
       ].where((p) => p[1].trim().isNotEmpty).toList();
-      final champs = paires.map((p) => '${p[0]} : ${p[1]}').join('\n');
+
+      final descLines = <pw.Widget>[
+        pw.Text(line.designation, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+      ];
+      for (var i = 0; i < paires.length; i += 2) {
+        final rowChildren = <pw.Widget>[
+          pw.Expanded(child: pw.Text('${paires[i][0]} : ${paires[i][1]}', style: champStyle)),
+        ];
+        if (i + 1 < paires.length) {
+          rowChildren.add(pw.SizedBox(width: 8));
+          rowChildren.add(pw.Expanded(child: pw.Text('${paires[i + 1][0]} : ${paires[i + 1][1]}', style: champStyle)));
+        }
+        descLines.add(pw.Padding(
+          padding: const pw.EdgeInsets.only(top: 1.5),
+          child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: rowChildren),
+        ));
+      }
 
       rows.add(pw.TableRow(
         children: [
-          pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3), child: pw.Text(champs, style: const pw.TextStyle(fontSize: 8.2))),
+          pw.Padding(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: descLines),
+          ),
           cell(line.qte.toStringAsFixed(line.qte == line.qte.roundToDouble() ? 0 : 2), align: pw.TextAlign.center),
           cell(_money(line.prixUnitaire), align: pw.TextAlign.right),
           cell(_money(line.total), align: pw.TextAlign.right),
@@ -360,8 +380,8 @@ class PdfTicketBuilder {
         pw.Table(
           border: pw.TableBorder.all(width: 0.6),
           columnWidths: const {
-            0: pw.FlexColumnWidth(5),
-            1: pw.FlexColumnWidth(1.2),
+            0: pw.FlexColumnWidth(6.5),
+            1: pw.FlexColumnWidth(0.8),
             2: pw.FlexColumnWidth(1.6),
             3: pw.FlexColumnWidth(1.8),
           },

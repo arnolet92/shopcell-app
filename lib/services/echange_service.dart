@@ -73,6 +73,7 @@ class EchangeRecap {
     this.message,
     this.oldDesignation,
     this.newDesignation,
+    this.newPrixUnitaire = 0,
     this.prixAjoute = 0,
     this.montantFinal = 0,
     this.totalApres = 0,
@@ -86,6 +87,9 @@ class EchangeRecap {
   final String? message;
   final String? oldDesignation;
   final String? newDesignation;
+  /// "Prix de vente" du produit qui sort de stock — modifiable, par défaut
+  /// son prix catalogue.
+  final double newPrixUnitaire;
   final double prixAjoute;
   final double montantFinal;
   final double totalApres;
@@ -103,6 +107,7 @@ class EchangeRecap {
       error: false,
       oldDesignation: j['old_designation']?.toString(),
       newDesignation: j['new_designation']?.toString(),
+      newPrixUnitaire: d(j['new_prix_unitaire']),
       prixAjoute: d(j['prix_ajoute']),
       montantFinal: d(j['montant_final']),
       totalApres: d(j['total_apres']),
@@ -150,9 +155,12 @@ class EchangeService {
     return data.whereType<Map>().map((e) => ProduitModel.fromJson(Map<String, dynamic>.from(e))).toList();
   }
 
-  Future<EchangeRecap> recap({required String idVentes, required String newProduitsId, double? prixAjoute}) async {
+  /// [prixVente] : "prix de vente" (modifiable) du produit qui sort de
+  /// stock — par défaut son prix catalogue si non fourni. "Prix ajouté"
+  /// n'est plus un paramètre : il est recalculé côté serveur.
+  Future<EchangeRecap> recap({required String idVentes, required String newProduitsId, double? prixVente}) async {
     final fields = <String, String>{'id_ventes': idVentes, 'new_produits_id': newProduitsId};
-    if (prixAjoute != null) fields['prix_ajoute'] = prixAjoute.toString();
+    if (prixVente != null) fields['prix_vente'] = prixVente.toString();
     final data = await ApiClient.instance.post('echange_recap', fields: fields);
     if (data is! Map) return EchangeRecap(error: true, message: 'Réponse du serveur invalide.');
     return EchangeRecap.fromJson(Map<String, dynamic>.from(data));
@@ -161,7 +169,7 @@ class EchangeService {
   Future<EchangeResult> valider({
     required String idVentes,
     required String newProduitsId,
-    required double prixAjoute,
+    required double prixVente,
     required bool isDefaut,
     String? motifReparation,
     String? batterie,
@@ -174,7 +182,7 @@ class EchangeService {
     final fields = <String, String>{
       'id_ventes': idVentes,
       'new_produits_id': newProduitsId,
-      'prix_ajoute': prixAjoute.toString(),
+      'prix_vente': prixVente.toString(),
       'isdefaut': isDefaut ? '1' : '0',
       'user': jsonEncode(user.mobPayload),
       'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),

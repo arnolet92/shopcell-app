@@ -47,7 +47,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   Map<String, dynamic>? _facture;
 
   final _produitSearchCtrl = TextEditingController();
-  final _prixAjouteCtrl = TextEditingController();
+  final _prixVenteCtrl = TextEditingController();
   final _motifCtrl = TextEditingController();
   final _batterieCtrl = TextEditingController();
   Timer? _debounceProduit;
@@ -82,7 +82,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   @override
   void dispose() {
     _produitSearchCtrl.dispose();
-    _prixAjouteCtrl.dispose();
+    _prixVenteCtrl.dispose();
     _motifCtrl.dispose();
     _batterieCtrl.dispose();
     _montantCtrl.dispose();
@@ -126,7 +126,9 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _selectedProduit = p;
       _produitResults = [];
       _produitSearchCtrl.clear();
-      _prixAjouteCtrl.clear();
+      // "Prix de vente" est automatique (prix catalogue de l'article choisi)
+      // mais modifiable ensuite.
+      _prixVenteCtrl.text = p.prixUnitaire.toStringAsFixed(0);
     });
     await _refreshRecap();
   }
@@ -135,14 +137,14 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     final produit = _selectedProduit;
     if (produit == null) return;
     setState(() => _recapLoading = true);
-    final prixAjoute = double.tryParse(_prixAjouteCtrl.text.replaceAll(' ', ''));
-    final rec = await EchangeService.instance.recap(idVentes: widget.idVentes, newProduitsId: produit.idProduits, prixAjoute: prixAjoute);
+    final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
+    final rec = await EchangeService.instance.recap(idVentes: widget.idVentes, newProduitsId: produit.idProduits, prixVente: prixVente);
     if (!mounted) return;
     setState(() {
       _recap = rec;
       _recapLoading = false;
-      if (!rec.error && _prixAjouteCtrl.text.trim().isEmpty) {
-        _prixAjouteCtrl.text = rec.prixAjoute.toStringAsFixed(0);
+      if (!rec.error && _prixVenteCtrl.text.trim().isEmpty) {
+        _prixVenteCtrl.text = rec.newPrixUnitaire.toStringAsFixed(0);
       }
       final remaining = rec.error ? 0.0 : (rec.reste - _splitsSum);
       _montantCtrl.text = remaining > 0 ? remaining.toStringAsFixed(0) : '0';
@@ -212,11 +214,11 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _submitting = true;
       _error = null;
     });
-    final prixAjoute = double.tryParse(_prixAjouteCtrl.text.replaceAll(' ', '')) ?? rec.prixAjoute;
+    final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', '')) ?? rec.newPrixUnitaire;
     final result = await EchangeService.instance.valider(
       idVentes: widget.idVentes,
       newProduitsId: produit.idProduits,
-      prixAjoute: prixAjoute,
+      prixVente: prixVente,
       isDefaut: _isDefaut,
       motifReparation: _isDefaut ? _motifCtrl.text : null,
       batterie: _isDefaut ? _batterieCtrl.text : null,
@@ -472,11 +474,30 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InlineField(
-          label: 'Prix ajouté (Ar)',
-          controller: _prixAjouteCtrl,
-          prefixIcon: Icons.add_card_rounded,
+          label: 'Prix de vente (Ar)',
+          controller: _prixVenteCtrl,
+          prefixIcon: Icons.sell_rounded,
           keyboardType: TextInputType.number,
           onChanged: (_) => _refreshRecap(),
+        ),
+        const SizedBox(height: 14),
+        // "Prix ajouté" n'est plus saisi : recalculé automatiquement côté
+        // serveur (prix de vente - 80% du prix de vente d'origine de
+        // l'article retourné, arrondi au multiple de 50 000 supérieur).
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(14)),
+          child: Row(
+            children: [
+              Text('Prix ajouté', style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textMuted)),
+              const Spacer(),
+              Text(
+                _fmt(_recap?.prixAjoute ?? 0),
+                style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppColors.accentLight),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         Container(

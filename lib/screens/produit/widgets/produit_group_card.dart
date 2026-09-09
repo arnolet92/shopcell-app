@@ -37,6 +37,7 @@ class ProduitGroupCard extends StatefulWidget {
     this.onTerminerReparation,
     this.onAddToCart,
     this.onTapUnit,
+    this.onRemettreEnStock,
   });
 
   final ProduitGroup group;
@@ -51,6 +52,9 @@ class ProduitGroupCard extends StatefulWidget {
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
   final void Function(ProduitModel produit)? onTerminerReparation;
+  /// Onglet "Après échange" : remet l'article dans le circuit normal
+  /// (produit_apres_echange = 0).
+  final void Function(ProduitModel produit)? onRemettreEnStock;
   /// Ajout rapide au ticket (panier de vente) depuis "Gestion d'article" —
   /// même principe que le bouton "ajoutez au ticket" de `tabproduit2.php`
   /// côté web (quantité 1, ajout immédiat).
@@ -208,6 +212,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           onTerminerReparation: widget.onTerminerReparation,
                           onAddToCart: widget.onAddToCart,
                           onTapUnit: widget.onTapUnit,
+                          onRemettreEnStock: widget.onRemettreEnStock,
                         )),
                   ],
                 ],
@@ -280,6 +285,7 @@ class _UnitRow extends StatelessWidget {
     this.onTerminerReparation,
     this.onAddToCart,
     this.onTapUnit,
+    this.onRemettreEnStock,
   });
   final ProduitModel produit;
   final String Function(double) fmt;
@@ -293,6 +299,7 @@ class _UnitRow extends StatelessWidget {
   final void Function(ProduitModel produit)? onTerminerReparation;
   final void Function(ProduitModel produit)? onAddToCart;
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
+  final void Function(ProduitModel produit)? onRemettreEnStock;
 
   @override
   Widget build(BuildContext context) {
@@ -325,6 +332,11 @@ class _UnitRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (produit.produitApresEchange)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.undo_rounded, size: 14, color: Color(0xFF8B5CF6)),
+                  ),
                 if (produit.isReparationProduits)
                   const Padding(
                     padding: EdgeInsets.only(right: 6),
@@ -334,14 +346,20 @@ class _UnitRow extends StatelessWidget {
                   '${fmt(produit.prixUnitaire)} Ar',
                   style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                 ),
-                if (showValiderAction && onValider != null)
+                if (produit.produitApresEchange && onRemettreEnStock != null)
+                  IconButton(
+                    icon: const Icon(Icons.undo_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                    tooltip: 'Remettre en stock',
+                    onPressed: () => onRemettreEnStock!(produit),
+                  )
+                else if (showValiderAction && onValider != null)
                   IconButton(
                     icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.green),
                     tooltip: 'Valider',
                     onPressed: () => onValider!(produit),
                   )
                 else ...[
-                  if (onAddToCart != null && produit.totalStock > 0 && !produit.isReparationProduits)
+                  if (onAddToCart != null && produit.totalStock > 0 && !produit.isReparationProduits && !produit.produitApresEchange)
                     IconButton(
                       icon: const Icon(Icons.add_shopping_cart_rounded, size: 17, color: AppColors.green),
                       tooltip: 'Ajouter au ticket',

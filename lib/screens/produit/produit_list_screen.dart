@@ -214,6 +214,34 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     }
   }
 
+  Future<void> _remettreEnStock(ProduitModel p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Remettre en stock ?', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Cet article redeviendra visible et vendable normalement.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Confirmer', style: TextStyle(color: AppColors.accentLight, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final result = await ProduitService.instance.remettreEnStock(idProduits: p.idProduits);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article remis en stock.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
   Future<String?> _promptMotif({required String title, required String confirmLabel, String? initial}) {
     final controller = TextEditingController(text: initial ?? '');
     return showDialog<String>(
@@ -394,6 +422,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onMiseEnReparation: _miseEnReparation,
                     onTerminerReparation: _terminerReparation,
                     onAddToCart: _addToCart,
+                    onRemettreEnStock: _remettreEnStock,
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
@@ -440,6 +469,7 @@ class _VueTabs extends StatelessWidget {
         children: [
           chip(ProduitVue.tous, "Gestion d'article", Icons.list_rounded),
           chip(ProduitVue.attente, 'En attente', Icons.access_time_rounded),
+          chip(ProduitVue.apresEchange, 'Après échange', Icons.undo_rounded),
           chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
           chip(ProduitVue.reparation, 'Article en réparation', Icons.build_rounded),
         ],
