@@ -96,10 +96,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Aucune liste par défaut : seule la recherche (ou la création) fait
+  /// apparaître des clients. La recherche porte sur nom, prénom, CIN et
+  /// téléphone.
   List<PersonneModel> get _filteredClients {
     final q = _clientSearchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return _clients.take(6).toList();
-    return _clients.where((c) => c.nomComplet.toLowerCase().contains(q)).take(10).toList();
+    if (q.isEmpty) return const [];
+    return _clients.where((c) {
+      return c.nomComplet.toLowerCase().contains(q) ||
+          (c.prenom ?? '').toLowerCase().contains(q) ||
+          (c.cin ?? '').toLowerCase().contains(q) ||
+          (c.telephone ?? '').toLowerCase().contains(q);
+    }).take(15).toList();
   }
 
   /// Ouvre le formulaire complet (nom, prénom, CIN, téléphone) plutôt que de
@@ -282,10 +290,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(color: AppColors.accentGlow, borderRadius: BorderRadius.circular(12)),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.person_rounded, size: 17, color: AppColors.accentLight),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(Icons.person_rounded, size: 17, color: AppColors.accentLight),
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(_selectedClient!.nomComplet, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13.5))),
+                      Expanded(child: _ClientInfo(client: _selectedClient!)),
                       GestureDetector(onTap: () => setState(() => _selectedClient = null), child: const Icon(Icons.close_rounded, size: 17, color: AppColors.textMuted)),
                     ],
                   ),
@@ -303,28 +315,47 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     padding: EdgeInsets.symmetric(vertical: 8),
                     child: SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight)),
                   )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ..._filteredClients.map(
-                        (c) => ActionChip(
-                          avatar: const Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textSecondary),
-                          label: Text(c.nomComplet, style: const TextStyle(fontSize: 12)),
-                          backgroundColor: AppColors.bgElevated,
-                          onPressed: () => setState(() => _selectedClient = c),
+                else if (_clientSearchCtrl.text.trim().isNotEmpty) ...[
+                  ..._filteredClients.map(
+                    (c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Material(
+                        color: AppColors.bgElevated,
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () => setState(() {
+                            _selectedClient = c;
+                            _clientSearchCtrl.clear();
+                          }),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 2),
+                                  child: Icon(Icons.person_outline_rounded, size: 15, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: _ClientInfo(client: c)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      if (_clientSearchCtrl.text.trim().isNotEmpty)
-                        ActionChip(
-                          avatar: const Icon(Icons.add_rounded, size: 15, color: AppColors.accentLight),
-                          label: Text('Créer "${_clientSearchCtrl.text.trim()}"', style: const TextStyle(fontSize: 12)),
-                          backgroundColor: AppColors.accentGlow,
-                          onPressed: _submitting ? null : _quickAddClient,
-                        ),
-                    ],
+                    ),
                   ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ActionChip(
+                      avatar: const Icon(Icons.add_rounded, size: 15, color: AppColors.accentLight),
+                      label: Text('Créer "${_clientSearchCtrl.text.trim()}"', style: const TextStyle(fontSize: 12)),
+                      backgroundColor: AppColors.accentGlow,
+                      onPressed: _submitting ? null : _quickAddClient,
+                    ),
+                  ),
+                ],
               ],
 
               const SizedBox(height: 16),
@@ -429,6 +460,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Affiche nom / prénom / CIN / téléphone d'un client — dans les résultats
+/// de recherche et sur le client sélectionné.
+class _ClientInfo extends StatelessWidget {
+  const _ClientInfo({required this.client});
+  final PersonneModel client;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = <String>[
+      if ((client.prenom ?? '').trim().isNotEmpty) 'Prénom : ${client.prenom}',
+      if ((client.cin ?? '').trim().isNotEmpty) 'CIN : ${client.cin}',
+      if ((client.telephone ?? '').trim().isNotEmpty) 'Tél : ${client.telephone}',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(client.nomComplet, style: GoogleFonts.inter(color: AppColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600)),
+        if (details.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(details.join('   •   '), style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 11.5)),
+          ),
+      ],
     );
   }
 }

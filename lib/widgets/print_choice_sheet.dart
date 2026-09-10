@@ -9,6 +9,11 @@ import '../core/theme.dart';
 /// facture déjà payée (`FactureDetailScreen`) : "même système que la vente".
 class PrintChoiceSheet extends StatelessWidget {
   const PrintChoiceSheet({super.key, required this.hasTicket, required this.hasA4});
+
+  /// Une imprimante ticket est enregistrée dans les paramètres. L'option
+  /// "Ticket thermique" reste proposée même si `hasTicket` est faux (au tap,
+  /// un message renvoie vers Paramètres > Imprimante) — demandé pour que le
+  /// choix ticket soit toujours visible.
   final bool hasTicket;
   final bool hasA4;
 
@@ -31,14 +36,13 @@ class PrintChoiceSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Imprimer ?', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             const SizedBox(height: 16),
-            if (hasTicket)
-              _PrintChoiceTile(
-                icon: Icons.receipt_long_rounded,
-                label: 'Ticket thermique',
-                onTap: () => Navigator.of(context).pop('ticket'),
-              ),
+            _PrintChoiceTile(
+              icon: Icons.receipt_long_rounded,
+              label: hasTicket ? 'Ticket thermique' : 'Ticket thermique (imprimante non configurée)',
+              onTap: () => Navigator.of(context).pop('ticket'),
+            ),
             if (hasA4) ...[
-              if (hasTicket) const SizedBox(height: 10),
+              const SizedBox(height: 10),
               _PrintChoiceTile(
                 icon: Icons.description_rounded,
                 label: 'Format A4 (feuille)',

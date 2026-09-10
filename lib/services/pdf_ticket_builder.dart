@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 import '../models/receipt_line.dart';
 
@@ -81,6 +82,23 @@ class PdfTicketBuilder {
 
     final dateStr = _formatDateDMY(dateFacture);
 
+    // Police Unicode complète (Noto Sans) plutôt que la Helvetica intégrée
+    // du PDF, qui ne couvre que le Latin-1 : sur iOS, la saisie transforme
+    // souvent les apostrophes/tirets en "smart punctuation" (’ – …) absente
+    // de Helvetica, d'où un nom/prénom qui disparaissait silencieusement.
+    // Téléchargée puis mise en cache par le paquet `printing` ; repli sur la
+    // police par défaut si indisponible (hors ligne au 1er lancement).
+    pw.ThemeData? theme;
+    try {
+      theme = pw.ThemeData.withFont(
+        base: await PdfGoogleFonts.notoSansRegular(),
+        bold: await PdfGoogleFonts.notoSansBold(),
+        italic: await PdfGoogleFonts.notoSansItalic(),
+      );
+    } catch (_) {
+      theme = null;
+    }
+
     // pw.MultiPage (et non pw.Page) : une facture avec beaucoup d'articles
     // (tableau détaillé modèle/série/capacité/couleur/IMEI par ligne) peut
     // dépasser la hauteur d'une page A4 — avec pw.Page (page fixe unique),
@@ -93,6 +111,7 @@ class PdfTicketBuilder {
         pageTheme: pw.PageTheme(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
+          theme: theme,
           buildForeground: isCopie ? (context) => _copieWatermark() : null,
         ),
         build: (context) => [
@@ -455,7 +474,7 @@ class PdfTicketBuilder {
         puce("Le mobile modifié ou réparé par le client lui-même ou par une tierce personne"),
         puce("Dommage ou dysfonctionnement de l'écran"),
         puce("Les dommages dus à une cause extérieure : choc, dégâts des eaux, tension électrique"),
-        puce("La batterie (usure normale et perte de capacité avec le temps)"),
+        puce("Pourcentage de la batterie ( capacité Maximum )"),
         puce("Les accessoires fournis (chargeur, câble, écouteurs, coque, etc.)"),
         pw.SizedBox(height: 6),
         pw.Text('nb : Veuillez tester et vérifier votre produit avant de partir', style: smallBold),

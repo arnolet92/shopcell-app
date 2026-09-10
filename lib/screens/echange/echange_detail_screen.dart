@@ -51,6 +51,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   final _motifCtrl = TextEditingController();
   final _batterieCtrl = TextEditingController();
   Timer? _debounceProduit;
+  Timer? _debouncePrix;
   List<ProduitModel> _produitResults = [];
   ProduitModel? _selectedProduit;
 
@@ -87,6 +88,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     _batterieCtrl.dispose();
     _montantCtrl.dispose();
     _debounceProduit?.cancel();
+    _debouncePrix?.cancel();
     super.dispose();
   }
 
@@ -126,11 +128,21 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _selectedProduit = p;
       _produitResults = [];
       _produitSearchCtrl.clear();
-      // "Prix de vente" est automatique (prix catalogue de l'article choisi)
+      // "Prix actuel" est automatique (prix catalogue de l'article choisi)
       // mais modifiable ensuite.
       _prixVenteCtrl.text = p.prixUnitaire.toStringAsFixed(0);
     });
     await _refreshRecap();
+  }
+
+  /// Appelé à chaque frappe dans le champ "Prix actuel" : on ne relance le
+  /// calcul serveur qu'après une courte pause (sinon un appel réseau par
+  /// caractère, réponses dans le désordre, et le champ qui "saute"). On ne
+  /// réécrit jamais la valeur saisie dans le contrôleur (ça déplaçait le
+  /// curseur / empêchait de corriger le montant).
+  void _onPrixChanged(String _) {
+    _debouncePrix?.cancel();
+    _debouncePrix = Timer(const Duration(milliseconds: 500), _refreshRecap);
   }
 
   Future<void> _refreshRecap() async {
@@ -143,9 +155,6 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     setState(() {
       _recap = rec;
       _recapLoading = false;
-      if (!rec.error && _prixVenteCtrl.text.trim().isEmpty) {
-        _prixVenteCtrl.text = rec.newPrixUnitaire.toStringAsFixed(0);
-      }
       final remaining = rec.error ? 0.0 : (rec.reste - _splitsSum);
       _montantCtrl.text = remaining > 0 ? remaining.toStringAsFixed(0) : '0';
     });
@@ -256,6 +265,9 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         total: rec.montantFinal,
         cashierName: widget.user.nomComplet,
         clientName: entete?['nom_complet']?.toString(),
+        clientPrenom: entete?['prenom_personnes']?.toString(),
+        clientTelephone: entete?['telephone']?.toString(),
+        clientCin: entete?['cin_personnes']?.toString(),
         numeroFacture: entete?['numero_facture']?.toString(),
       );
       if (!mounted) return;
@@ -299,13 +311,17 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                           const SizedBox(height: 18),
                           _prixAjouteEtDefautSection(),
                           const SizedBox(height: 18),
-                          if (_recapLoading)
+                          // On garde le récapitulatif affiché pendant le
+                          // recalcul (petit spinner) plutôt que de le
+                          // remplacer par un gros indicateur — évite le
+                          // clignotement à chaque frappe dans "Prix actuel".
+                          if (_recap != null && !_recap!.error)
+                            Opacity(opacity: _recapLoading ? 0.5 : 1, child: _recapCard(_recap!))
+                          else if (_recapLoading)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
                               child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight)),
-                            )
-                          else if (_recap != null && !_recap!.error)
-                            _recapCard(_recap!),
+                            ),
                           if (_recap != null && !_recap!.error && _recap!.reste > 0) ...[
                             const SizedBox(height: 18),
                             _paiementSection(),
@@ -474,11 +490,11 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InlineField(
-          label: 'Prix de vente (Ar)',
+          label: 'Prix actuel (Ar)',
           controller: _prixVenteCtrl,
           prefixIcon: Icons.sell_rounded,
           keyboardType: TextInputType.number,
-          onChanged: (_) => _refreshRecap(),
+          onChanged: _onPrixChanged,
         ),
         const SizedBox(height: 14),
         // "Prix ajouté" n'est plus saisi : recalculé automatiquement côté
