@@ -28,6 +28,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   List<BluetoothInfo> _pairedDevices = [];
   BluetoothInfo? _selectedDevice;
   bool _loadingDevices = false;
+  final _manualMacController = TextEditingController();
 
   bool _saving = false;
   bool _testing = false;
@@ -50,6 +51,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void dispose() {
     _ipController.dispose();
     _portController.dispose();
+    _manualMacController.dispose();
     super.dispose();
   }
 
@@ -62,7 +64,10 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       _portController.text = cfg.wifiPort.toString();
     });
     if (cfg.type == PrinterType.bluetooth && cfg.bluetoothMac != null) {
-      setState(() => _selectedDevice = BluetoothInfo(name: cfg.bluetoothName ?? cfg.bluetoothMac!, macAdress: cfg.bluetoothMac!));
+      setState(() {
+        _selectedDevice = BluetoothInfo(name: cfg.bluetoothName ?? cfg.bluetoothMac!, macAdress: cfg.bluetoothMac!);
+        _manualMacController.text = cfg.bluetoothMac!;
+      });
     }
   }
 
@@ -71,22 +76,45 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       _loadingDevices = true;
       _message = null;
     });
-    final status = await [Permission.bluetoothConnect, Permission.bluetoothScan].request();
-    final granted = status.values.every((s) => s.isGranted);
-    if (!granted) {
+
+    // 1. Bluetooth activé ?
+    final btOn = await PrintBluetoothThermal.bluetoothEnabled;
+    if (!btOn) {
       setState(() {
         _loadingDevices = false;
-        _message = "Autorisation Bluetooth refusée.";
+        _message = "Le Bluetooth du téléphone est désactivé. Activez-le puis réessayez.";
         _messageIsError = true;
       });
       return;
     }
+
+    // 2. Permission. Lister les appareils DÉJÀ appairés ne nécessite que
+    //    BLUETOOTH_CONNECT sur Android 12+ (BLUETOOTH_SCAN sert à découvrir
+    //    de nouveaux appareils, on ne bloque pas dessus). Sur Android < 12,
+    //    ces permissions "install-time" sont déjà accordées.
+    final connect = await Permission.bluetoothConnect.request();
+    await Permission.bluetoothScan.request();
+    if (connect.isPermanentlyDenied) {
+      setState(() {
+        _loadingDevices = false;
+        _message = "Autorisation Bluetooth refusée. Activez-la dans les réglages Android de l'application (Autorisations > Appareils à proximité).";
+        _messageIsError = true;
+      });
+      return;
+    }
+
     try {
       final devices = await PrinterService.instance.pairedBluetoothPrinters();
       if (!mounted) return;
       setState(() {
         _pairedDevices = devices;
         _loadingDevices = false;
+        if (devices.isEmpty) {
+          _message = "Aucune imprimante appairée trouvée. Appairez d'abord l'imprimante "
+              "dans Réglages > Bluetooth du téléphone, puis revenez ici. "
+              "Vous pouvez aussi saisir son adresse MAC ci-dessous.";
+          _messageIsError = true;
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -98,11 +126,26 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     }
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
     setState(() {
       _saving = true;
       _message = null;
     });
+
+    // Bluetooth : l'appareil choisi dans la liste, sinon l'adresse MAC
+    // saisie manuellement (repli quand la liste des appairés reste vide).
+    final manualMac = _manualMacController.text.trim();
+    final btMac = _selectedDevice?.macAdress ?? (manualMac.isNotEmpty ? manualMac : null);
+    final btName = _selectedDevice?.name ?? (manualMac.isNotEmpty ? 'Imprimante ($manualMac)' : null);
+
+    if (_type == PrinterType.bluetooth && (btMac == null || btMac.isEmpty)) {
+      setState(() {
+        _saving = false;
+        _message = "Sélectionnez une imprimante appairée ou saisissez son adresse MAC.";
+        _messageIsError = true;
+      });
+      return false;
+    }
 
     final config = _type == PrinterType.wifi
         ? PrinterConfig(
@@ -112,17 +155,18 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           )
         : PrinterConfig(
             type: PrinterType.bluetooth,
-            bluetoothMac: _selectedDevice?.macAdress,
-            bluetoothName: _selectedDevice?.name,
+            bluetoothMac: btMac,
+            bluetoothName: btName,
           );
 
     await PrinterService.instance.saveConfig(config);
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() {
       _saving = false;
       _message = 'Configuration enregistrée.';
       _messageIsError = false;
     });
+    return true;
   }
 
   Future<void> _testPrint() async {
@@ -130,7 +174,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       _testing = true;
       _message = null;
     });
-    await _save();
+    final ok = await _save();
+    if (!ok) {
+      setState(() => _testing = false);
+      return;
+    }
     final bytes = await TicketBuilder.buildSaleReceipt(
       shopName: 'ShopCell',
       cashierName: 'Test',
@@ -266,12 +314,27 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                 (d) => RadioListTile<String>(
                   value: d.macAdress,
                   groupValue: _selectedDevice?.macAdress,
-                  onChanged: (_) => setState(() => _selectedDevice = d),
+                  onChanged: (_) => setState(() {
+                    _selectedDevice = d;
+                    _manualMacController.text = d.macAdress;
+                  }),
                   activeColor: AppColors.accent,
                   contentPadding: EdgeInsets.zero,
                   title: Text(d.name, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
                   subtitle: Text(d.macAdress, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                 ),
+              ),
+              const SizedBox(height: 12),
+              InlineField(
+                label: 'Adresse MAC (si l\'imprimante n\'apparaît pas)',
+                controller: _manualMacController,
+                prefixIcon: Icons.bluetooth_searching_rounded,
+                onChanged: (v) => setState(() => _selectedDevice = null),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Format : 00:11:22:33:44:55 — visible dans Réglages > Bluetooth du téléphone (appui long sur l'imprimante appairée).",
+                style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
               ),
             ],
             if (_message != null) ...[

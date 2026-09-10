@@ -242,15 +242,15 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
       // Imprime uniquement le NOUVEL article remis au client (pas l'ancien
-      // repris en échange) — P.U = prix de vente d'origine + prix ajouté,
-      // exactement le "montant final" déjà calculé par le récapitulatif.
+      // repris en échange). Sur le ticket d'échange, P.U = prix ajouté
+      // (le supplément payé), montant = prix ajouté x qté, qté = 1.
       final entete = _entete;
       final lines = [
         ReceiptLine(
           designation: produit.designation,
           qte: 1,
-          prixUnitaire: rec.montantFinal,
-          total: rec.montantFinal,
+          prixUnitaire: rec.prixAjoute,
+          total: rec.prixAjoute,
           numSerie: produit.numSerie,
           imei1: produit.imei1,
           imei2: produit.imei2,
@@ -262,13 +262,14 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       final printMessage = await ReceiptPrintService.instance.offerPrint(
         context,
         lines: lines,
-        total: rec.montantFinal,
+        total: rec.prixAjoute,
         cashierName: widget.user.nomComplet,
         clientName: entete?['nom_complet']?.toString(),
         clientPrenom: entete?['prenom_personnes']?.toString(),
         clientTelephone: entete?['telephone']?.toString(),
         clientCin: entete?['cin_personnes']?.toString(),
         numeroFacture: entete?['numero_facture']?.toString(),
+        isEchange: true,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);

@@ -127,9 +127,72 @@ class EchangeRecap {
 /// avec le principe des routes `Mob/*` (aucune session, chaque appel se
 /// suffit à lui-même) et avec la manière dont l'écran "Encaisser" gère déjà
 /// le paiement scindé d'une vente normale.
+/// Un échange archivé (`Mob/echange_historique`) — pour l'historique et la
+/// ré-impression du ticket d'échange.
+class EchangeHistoItem {
+  EchangeHistoItem({
+    required this.idEchange,
+    required this.numeroFacture,
+    required this.dateGest,
+    required this.dateRaw,
+    required this.oldDesignation,
+    required this.newDesignation,
+    required this.prixAjoute,
+    required this.montantFinal,
+    required this.isAnnule,
+    required this.raw,
+  });
+
+  final String idEchange;
+  final String numeroFacture;
+  final String dateGest;
+  final String? dateRaw;
+  final String oldDesignation;
+  final String newDesignation;
+  final double prixAjoute;
+  final double montantFinal;
+  final bool isAnnule;
+
+  /// Ligne JSON brute — sert directement à construire le ticket d'échange
+  /// (voir `EchangeHistoriqueScreen`), sans second aller-retour serveur.
+  final Map<String, dynamic> raw;
+
+  static double _d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+  static String? _s(dynamic v) {
+    final t = v?.toString().trim();
+    return (t == null || t.isEmpty) ? null : t;
+  }
+
+  factory EchangeHistoItem.fromJson(Map<String, dynamic> j) {
+    return EchangeHistoItem(
+      idEchange: '${j['id_echange'] ?? ''}',
+      numeroFacture: _s(j['numero_factures_client']) ?? _s(j['numero_facture_echange']) ?? 'F/${j['client_id'] ?? ''}',
+      dateGest: _s(j['date_echange_gest']) ?? '',
+      dateRaw: _s(j['echange_at_raw']) ?? _s(j['echange_at']),
+      oldDesignation: _s(j['old_designation']) ?? '-',
+      newDesignation: _s(j['new_designation']) ?? '-',
+      prixAjoute: _d(j['prix_ajoute']),
+      montantFinal: _d(j['montant_final']),
+      isAnnule: '${j['isannule'] ?? '0'}' == '1',
+      raw: j,
+    );
+  }
+}
+
 class EchangeService {
   EchangeService._();
   static final EchangeService instance = EchangeService._();
+
+  /// Historique des échanges archivés sur une période.
+  Future<List<EchangeHistoItem>> historique({String? arg, String? date1, String? date2}) async {
+    final data = await ApiClient.instance.post('echange_historique', fields: {
+      if (arg != null && arg.trim().isNotEmpty) 'arg': arg.trim(),
+      if (date1 != null && date1.isNotEmpty) 'date1': date1,
+      if (date2 != null && date2.isNotEmpty) 'date2': date2,
+    });
+    if (data is! List) return [];
+    return data.whereType<Map>().map((e) => EchangeHistoItem.fromJson(Map<String, dynamic>.from(e))).toList();
+  }
 
   Future<List<VenteLigne>> searchVentes(String arg) async {
     if (arg.trim().isEmpty) return [];

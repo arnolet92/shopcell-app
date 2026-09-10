@@ -38,6 +38,8 @@ class ReceiptPrintService {
     /// Réimpression d'une facture déjà payée : ajoute le filigrane
     /// "FACTURE COPIE" sur le PDF A4 (sans effet sur le ticket thermique).
     bool isCopie = false,
+    /// Ticket d'un échange : filigrane "Échange" sur le PDF A4.
+    bool isEchange = false,
   }) async {
     final ticketCfg = await PrinterService.instance.config;
     final hasTicket = ticketCfg?.isConfigured ?? false;
@@ -86,6 +88,7 @@ class ReceiptPrintService {
         clientTelephone: clientTelephone,
         clientCin: clientCin,
         isCopie: isCopie,
+        isEchange: isEchange,
       );
       if (choice == 'a4_share') {
         final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${numeroFacture ?? ''}.pdf');
@@ -147,6 +150,7 @@ class ReceiptPrintService {
     String? clientTelephone,
     String? clientCin,
     bool isCopie = false,
+    bool isEchange = false,
   }) async {
     final shopInfo = await VenteService.instance.loadShopInfo();
     final baseUrl = await ApiClient.instance.baseUrl;
@@ -174,6 +178,7 @@ class ReceiptPrintService {
       clientTelephone: clientTelephone,
       clientCin: clientCin,
       isCopie: isCopie,
+      isEchange: isEchange,
     );
   }
 }

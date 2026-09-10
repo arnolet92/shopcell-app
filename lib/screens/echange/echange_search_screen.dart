@@ -8,6 +8,7 @@ import '../../models/user_model.dart';
 import '../../services/echange_service.dart';
 import '../../widgets/inline_field.dart';
 import 'echange_detail_screen.dart';
+import 'echange_historique_screen.dart';
 
 /// Point d'entrée du système d'échange côté mobile : recherche d'un article
 /// déjà vendu (désignation, N° série, IMEI, modèle, capacité) — miroir de
@@ -71,6 +72,15 @@ class _EchangeSearchScreenState extends State<EchangeSearchScreen> {
         backgroundColor: AppColors.bgCard,
         elevation: 0,
         title: Text('Faire un échange', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded, color: AppColors.accentLight),
+            tooltip: 'Historique des échanges',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => EchangeHistoriqueScreen(user: widget.user)),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(

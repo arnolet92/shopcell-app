@@ -67,6 +67,9 @@ class PdfTicketBuilder {
     /// un filigrane diagonal "FACTURE COPIE" pour la distinguer de
     /// l'original imprimé au moment de la vente.
     bool isCopie = false,
+    /// Ticket d'un échange : filigrane incliné "Échange" (bas-gauche vers
+    /// haut-droite) en premier plan transparent.
+    bool isEchange = false,
   }) async {
     final doc = pw.Document();
 
@@ -112,7 +115,14 @@ class PdfTicketBuilder {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
           theme: theme,
-          buildForeground: isCopie ? (context) => _copieWatermark() : null,
+          buildForeground: (isCopie || isEchange)
+              ? (context) => pw.Stack(
+                    children: [
+                      if (isEchange) pw.Positioned.fill(child: _echangeWatermark()),
+                      if (isCopie) pw.Positioned.fill(child: _copieWatermark()),
+                    ],
+                  )
+              : null,
         ),
         build: (context) => [
           _header(
@@ -158,6 +168,23 @@ class PdfTicketBuilder {
           child: pw.Text(
             'FACTURE COPIE',
             style: pw.TextStyle(fontSize: 62, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700, letterSpacing: 4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Filigrane incliné "Échange" — de bas-gauche vers haut-droite (pente
+  /// positive), premier plan transparent, pour tout ticket d'échange.
+  static pw.Widget _echangeWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: 0.6,
+        child: pw.Opacity(
+          opacity: 0.18,
+          child: pw.Text(
+            'Échange',
+            style: pw.TextStyle(fontSize: 90, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey600, letterSpacing: 6),
           ),
         ),
       ),
