@@ -42,7 +42,8 @@ class ReceiptPrintService {
     final ticketCfg = await PrinterService.instance.config;
     final hasTicket = ticketCfg?.isConfigured ?? false;
     final hasA4 = await PrinterService.instance.isA4Enabled;
-    if (!hasTicket && !hasA4) return '';
+    // On ne coupe plus court quand rien n'est configuré : l'option "Ticket
+    // thermique" est toujours proposée (au tap, message vers Paramètres).
     if (!context.mounted) return '';
 
     final choice = await showModalBottomSheet<String>(
