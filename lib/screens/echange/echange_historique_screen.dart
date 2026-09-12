@@ -8,6 +8,7 @@ import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/echange_service.dart';
 import '../../services/receipt_print_service.dart';
+import '../../widgets/client_info_dialog.dart';
 import '../../widgets/inline_field.dart';
 
 String _fmt(double v) {
@@ -104,12 +105,15 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
       return (t == null || t.isEmpty) ? null : t;
     }
 
+    double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+    final newPrixUnitaire = d(j['new_prix_unitaire']);
+    final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : newPrixUnitaire;
     final lines = [
       ReceiptLine(
         designation: s(j['new_designation']) ?? 'Article',
         qte: 1,
-        prixUnitaire: item.prixAjoute,
-        total: item.prixAjoute,
+        prixUnitaire: prixUnitaireTicket,
+        total: prixUnitaireTicket,
         numSerie: s(j['new_num_serie']),
         imei1: s(j['new_imei1']),
         imei2: s(j['new_imei2']),
@@ -119,15 +123,25 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
         nomSousCategoriePiece: s(j['new_nom_batterie']),
       ),
     ];
+
+    final clientInfo = await showClientInfoDialog(
+      context,
+      initialNom: s(j['client_nom_complet']),
+      initialPrenom: s(j['client_prenom']),
+      initialTelephone: s(j['client_telephone']),
+      initialCin: s(j['client_cin']),
+    );
+    if (!mounted) return;
+
     final message = await ReceiptPrintService.instance.offerPrint(
       context,
       lines: lines,
-      total: item.prixAjoute,
+      total: prixUnitaireTicket,
       cashierName: widget.user.nomComplet,
-      clientName: s(j['client_nom_complet']),
-      clientPrenom: s(j['client_prenom']),
-      clientTelephone: s(j['client_telephone']),
-      clientCin: s(j['client_cin']),
+      clientName: clientInfo?.nom,
+      clientPrenom: clientInfo?.prenom,
+      clientTelephone: clientInfo?.telephone,
+      clientCin: clientInfo?.cin,
       numeroFacture: item.numeroFacture,
       dateFacture: item.dateRaw,
       isEchange: true,

@@ -6,9 +6,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../models/user_model.dart';
 import '../../services/echange_service.dart';
+import '../../widgets/autocomplete_lookup_field.dart';
 import '../../widgets/inline_field.dart';
 import 'echange_detail_screen.dart';
 import 'echange_historique_screen.dart';
+import 'echange_simulation_screen.dart';
+import 'echange_ulterieur_detail_screen.dart';
 
 /// Point d'entrée du système d'échange côté mobile : recherche d'un article
 /// déjà vendu (désignation, N° série, IMEI, modèle, capacité) — miroir de
@@ -28,11 +31,44 @@ class _EchangeSearchScreenState extends State<EchangeSearchScreen> {
   bool _searched = false;
   Timer? _debounce;
 
+  bool _isUlterieur = false;
+  final _designationCtrl = TextEditingController();
+  List<String> _designationSuggestions = [];
+  Timer? _debounceDesignation;
+
+  @override
+  void initState() {
+    super.initState();
+    _designationCtrl.addListener(_onDesignationChanged);
+  }
+
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _designationCtrl.removeListener(_onDesignationChanged);
+    _designationCtrl.dispose();
     _debounce?.cancel();
+    _debounceDesignation?.cancel();
     super.dispose();
+  }
+
+  void _onDesignationChanged() {
+    setState(() {}); // reflète la saisie sur l'état activé du bouton "OK"
+    final v = _designationCtrl.text;
+    _debounceDesignation?.cancel();
+    _debounceDesignation = Timer(const Duration(milliseconds: 400), () async {
+      final results = await EchangeService.instance.searchDesignations(v);
+      if (!mounted) return;
+      setState(() => _designationSuggestions = results);
+    });
+  }
+
+  void _ulterieurOk() {
+    final designation = _designationCtrl.text.trim();
+    if (designation.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EchangeUlterieurDetailScreen(designation: designation, user: widget.user)),
+    );
   }
 
   void _onChanged(String v) {
@@ -74,6 +110,13 @@ class _EchangeSearchScreenState extends State<EchangeSearchScreen> {
         title: Text('Faire un échange', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.calculate_rounded, color: AppColors.accentLight),
+            tooltip: "Simulation d'échange",
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const EchangeSimulationScreen()),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.history_rounded, color: AppColors.accentLight),
             tooltip: 'Historique des échanges',
             onPressed: () => Navigator.of(context).push(
@@ -88,20 +131,62 @@ class _EchangeSearchScreenState extends State<EchangeSearchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Recherchez l\'article déjà vendu à échanger',
-                style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isUlterieur ? 'Article vendu ultérieurement' : "Recherchez l'article déjà vendu à échanger",
+                      style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  Text('Vendu ultérieurement', style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted)),
+                  Switch(
+                    value: _isUlterieur,
+                    activeThumbColor: AppColors.accentLight,
+                    onChanged: (v) => setState(() {
+                      _isUlterieur = v;
+                      _designationCtrl.clear();
+                      _designationSuggestions = [];
+                    }),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
-              InlineField(
-                label: 'Désignation, N° série, IMEI, modèle...',
-                controller: _searchCtrl,
-                prefixIcon: Icons.search_rounded,
-                autofocus: true,
-                onChanged: _onChanged,
-              ),
+              if (_isUlterieur) ...[
+                AutocompleteLookupField(
+                  label: "Nom de l'article repris",
+                  controller: _designationCtrl,
+                  suggestions: _designationSuggestions,
+                  prefixIcon: Icons.inventory_2_rounded,
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _designationCtrl.text.trim().isEmpty ? null : _ulterieurOk,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('OK'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                InlineField(
+                  label: 'Désignation, N° série, IMEI, modèle...',
+                  controller: _searchCtrl,
+                  prefixIcon: Icons.search_rounded,
+                  autofocus: true,
+                  onChanged: _onChanged,
+                ),
+              ],
               const SizedBox(height: 18),
-              if (_loading)
+              if (_isUlterieur)
+                const SizedBox.shrink()
+              else if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
                   child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentLight)),

@@ -13,6 +13,7 @@ import '../../services/app_data_cache.dart';
 import '../../services/echange_service.dart';
 import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
+import '../../widgets/client_info_dialog.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
 
@@ -56,6 +57,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   ProduitModel? _selectedProduit;
 
   bool _isDefaut = false;
+  bool _nonUpgrade = false;
   EchangeRecap? _recap;
   bool _recapLoading = false;
 
@@ -150,7 +152,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     if (produit == null) return;
     setState(() => _recapLoading = true);
     final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
-    final rec = await EchangeService.instance.recap(idVentes: widget.idVentes, newProduitsId: produit.idProduits, prixVente: prixVente);
+    final rec = await EchangeService.instance.recap(idVentes: widget.idVentes, newProduitsId: produit.idProduits, prixVente: prixVente, nonUpgrade: _nonUpgrade);
     if (!mounted) return;
     setState(() {
       _recap = rec;
@@ -233,6 +235,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       batterie: _isDefaut ? _batterieCtrl.text : null,
       user: widget.user,
       paiements: _effectiveSplits,
+      nonUpgrade: _nonUpgrade,
     );
     if (!mounted) return;
     if (result.success) {
@@ -242,15 +245,17 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
       // Imprime uniquement le NOUVEL article remis au client (pas l'ancien
-      // repris en échange). Sur le ticket d'échange, P.U = prix ajouté
-      // (le supplément payé), montant = prix ajouté x qté, qté = 1.
+      // repris en échange). P.U = prix ajouté, sauf si prix ajouté = 0
+      // (article "Non upgrade" ou repris à sa pleine valeur) : dans ce cas
+      // P.U = prix actuel (le prix de l'article remis).
       final entete = _entete;
+      final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
       final lines = [
         ReceiptLine(
           designation: produit.designation,
           qte: 1,
-          prixUnitaire: rec.prixAjoute,
-          total: rec.prixAjoute,
+          prixUnitaire: prixUnitaireTicket,
+          total: prixUnitaireTicket,
           numSerie: produit.numSerie,
           imei1: produit.imei1,
           imei2: produit.imei2,
@@ -259,15 +264,28 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
           nomTypePiece: produit.nomTypePiece,
         ),
       ];
+
+      // Avant l'impression A4, on propose de saisir/corriger les
+      // coordonnées client à afficher — facultatif, pré-rempli avec ce
+      // qu'on connaît déjà de la facture d'origine.
+      final clientInfo = await showClientInfoDialog(
+        context,
+        initialNom: entete?['nom_complet']?.toString(),
+        initialPrenom: entete?['prenom_personnes']?.toString(),
+        initialTelephone: entete?['telephone']?.toString(),
+        initialCin: entete?['cin_personnes']?.toString(),
+      );
+      if (!mounted) return;
+
       final printMessage = await ReceiptPrintService.instance.offerPrint(
         context,
         lines: lines,
-        total: rec.prixAjoute,
+        total: prixUnitaireTicket,
         cashierName: widget.user.nomComplet,
-        clientName: entete?['nom_complet']?.toString(),
-        clientPrenom: entete?['prenom_personnes']?.toString(),
-        clientTelephone: entete?['telephone']?.toString(),
-        clientCin: entete?['cin_personnes']?.toString(),
+        clientName: clientInfo?.nom,
+        clientPrenom: clientInfo?.prenom,
+        clientTelephone: clientInfo?.telephone,
+        clientCin: clientInfo?.cin,
         numeroFacture: entete?['numero_facture']?.toString(),
         isEchange: true,
       );
@@ -304,7 +322,33 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _factureCard(),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 18),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(14)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Non upgrade', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                    Text('Aucun supplément, prix ajouté = 0', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _nonUpgrade,
+                                activeThumbColor: AppColors.accentLight,
+                                onChanged: (v) {
+                                  setState(() => _nonUpgrade = v);
+                                  _refreshRecap();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
                         Text('Article de remplacement', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                         const SizedBox(height: 8),
                         if (_selectedProduit != null) _selectedProduitCard() else _produitSearch(),

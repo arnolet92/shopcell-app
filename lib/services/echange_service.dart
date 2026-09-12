@@ -221,8 +221,10 @@ class EchangeService {
   /// [prixVente] : "prix de vente" (modifiable) du produit qui sort de
   /// stock — par défaut son prix catalogue si non fourni. "Prix ajouté"
   /// n'est plus un paramètre : il est recalculé côté serveur.
-  Future<EchangeRecap> recap({required String idVentes, required String newProduitsId, double? prixVente}) async {
-    final fields = <String, String>{'id_ventes': idVentes, 'new_produits_id': newProduitsId};
+  /// [nonUpgrade] : force le prix ajouté à 0 côté serveur, quel que soit
+  /// le prix affiché (article repris de valeur équivalente).
+  Future<EchangeRecap> recap({required String idVentes, required String newProduitsId, double? prixVente, bool nonUpgrade = false}) async {
+    final fields = <String, String>{'id_ventes': idVentes, 'new_produits_id': newProduitsId, 'non_upgrade': nonUpgrade ? '1' : '0'};
     if (prixVente != null) fields['prix_vente'] = prixVente.toString();
     final data = await ApiClient.instance.post('echange_recap', fields: fields);
     if (data is! Map) return EchangeRecap(error: true, message: 'Réponse du serveur invalide.');
@@ -238,6 +240,7 @@ class EchangeService {
     String? batterie,
     required UserModel user,
     required List<PaymentSplit> paiements,
+    bool nonUpgrade = false,
   }) async {
     if (isDefaut && (motifReparation == null || motifReparation.trim().isEmpty)) {
       return EchangeResult(success: false, message: 'Le motif de réparation est obligatoire pour un article retourné avec défaut.');
@@ -247,6 +250,7 @@ class EchangeService {
       'new_produits_id': newProduitsId,
       'prix_vente': prixVente.toString(),
       'isdefaut': isDefaut ? '1' : '0',
+      'non_upgrade': nonUpgrade ? '1' : '0',
       'user': jsonEncode(user.mobPayload),
       'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
     };
@@ -257,6 +261,73 @@ class EchangeService {
       fields['batterie'] = batterie.trim();
     }
     final data = await ApiClient.instance.post('echange_valider', fields: fields);
+    if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? "L'échange a échoué." : 'Échange validé avec succès.'),
+    );
+  }
+
+  /// "Article vendu ultérieurement" : autocomplétion des désignations déjà
+  /// connues dans `produits`, pour aider à saisir le nom de l'article repris
+  /// (jamais vendu via ce logiciel, donc introuvable par `searchVentes`).
+  Future<List<String>> searchDesignations(String arg) async {
+    if (arg.trim().isEmpty) return [];
+    final data = await ApiClient.instance.post('echange_search_designations', fields: {'arg': arg});
+    if (data is! List) return [];
+    return data.whereType<Map>().map((e) => e['designation_produits']?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+  }
+
+  Future<EchangeRecap> recapUlterieur({
+    required String designation,
+    required double prixActuelRepris,
+    required String newProduitsId,
+    double? prixVente,
+    bool nonUpgrade = false,
+  }) async {
+    final fields = <String, String>{
+      'designation': designation,
+      'prix_actuel_repris': prixActuelRepris.toString(),
+      'new_produits_id': newProduitsId,
+      'non_upgrade': nonUpgrade ? '1' : '0',
+    };
+    if (prixVente != null) fields['prix_vente'] = prixVente.toString();
+    final data = await ApiClient.instance.post('echange_ulterieur_recap', fields: fields);
+    if (data is! Map) return EchangeRecap(error: true, message: 'Réponse du serveur invalide.');
+    return EchangeRecap.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<EchangeResult> validerUlterieur({
+    required String designation,
+    required double prixActuelRepris,
+    required String newProduitsId,
+    required double prixVente,
+    required bool isDefaut,
+    String? motifReparation,
+    String? batterie,
+    required UserModel user,
+    bool nonUpgrade = false,
+  }) async {
+    if (isDefaut && (motifReparation == null || motifReparation.trim().isEmpty)) {
+      return EchangeResult(success: false, message: 'Le motif de réparation est obligatoire pour un article retourné avec défaut.');
+    }
+    final fields = <String, String>{
+      'designation': designation,
+      'prix_actuel_repris': prixActuelRepris.toString(),
+      'new_produits_id': newProduitsId,
+      'prix_vente': prixVente.toString(),
+      'isdefaut': isDefaut ? '1' : '0',
+      'non_upgrade': nonUpgrade ? '1' : '0',
+      'user': jsonEncode(user.mobPayload),
+    };
+    if (motifReparation != null && motifReparation.trim().isNotEmpty) {
+      fields['motif_reparation'] = motifReparation.trim();
+    }
+    if (batterie != null && batterie.trim().isNotEmpty) {
+      fields['batterie'] = batterie.trim();
+    }
+    final data = await ApiClient.instance.post('echange_ulterieur_valider', fields: fields);
     if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
     final error = data['error'] == true;
     return EchangeResult(
