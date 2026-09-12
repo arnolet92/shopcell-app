@@ -3,11 +3,19 @@ import 'package:flutter/foundation.dart';
 import '../models/produit_model.dart';
 
 class CartLine {
-  CartLine({required this.produit, required this.qte});
+  CartLine({required this.produit, required this.qte, double? prixVente}) : prixVente = prixVente ?? produit.prixUnitaire;
   final ProduitModel produit;
   int qte;
 
-  double get total => qte * produit.prixUnitaire;
+  /// Prix de vente de cette ligne — modifiable depuis le panier (bouton
+  /// "remise"), sans jamais toucher au prix catalogue de l'article
+  /// (`produit.prixUnitaire`). Envoyé tel quel comme `ventes.prix_ventes`
+  /// à la validation (voir `VenteService._cartPayload`).
+  double prixVente;
+
+  double get total => qte * prixVente;
+
+  bool get isRemise => prixVente != produit.prixUnitaire;
 }
 
 /// Panier de vente partagé entre l'écran Vente et l'écran "vente par scan
@@ -37,6 +45,15 @@ class CartService extends ChangeNotifier {
     } else {
       _lines[produit.idProduits] = CartLine(produit: produit, qte: qte);
     }
+    notifyListeners();
+  }
+
+  /// Modifie le prix de vente d'une ligne du panier (bouton "remise") —
+  /// n'a aucun effet sur le prix catalogue de l'article.
+  void setPrixVente(String idProduits, double prix) {
+    final line = _lines[idProduits];
+    if (line == null) return;
+    line.prixVente = prix < 0 ? 0 : prix;
     notifyListeners();
   }
 

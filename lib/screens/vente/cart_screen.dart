@@ -12,6 +12,58 @@ import '../../widgets/inline_field.dart';
 import '../../widgets/produit_image.dart';
 import 'payment_screen.dart';
 
+String _fmtMoney(double v) {
+  final s = v.round().toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+    buf.write(s[i]);
+  }
+  return '${buf.toString()} Ar';
+}
+
+/// Bouton "remise" du panier : modifie le prix de vente de CETTE ligne
+/// uniquement (table `ventes`, colonne `prix_ventes`) — le prix catalogue de
+/// l'article (`produits`) n'est jamais touché.
+Future<void> _editPrixVente(BuildContext context, CartLine line) async {
+  final ctrl = TextEditingController(text: line.prixVente.toStringAsFixed(0));
+  final result = await showDialog<double>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: AppColors.bgCard,
+      title: const Text('Prix de vente', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Prix catalogue : ${_fmtMoney(line.produit.prixUnitaire)}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          InlineField(
+            label: 'Prix de vente (Ar)',
+            controller: ctrl,
+            prefixIcon: Icons.sell_rounded,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(double.tryParse(ctrl.text.replaceAll(' ', '')) ?? line.prixVente),
+          child: const Text('Valider', style: TextStyle(color: AppColors.green, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  if (result != null) {
+    CartService.instance.setPrixVente(line.produit.idProduits, result);
+  }
+}
+
 /// Panier : liste des articles choisis (avec IMEI/série/capacité/modèle),
 /// possibilité de vider le panier ou d'annuler chaque ligne, puis
 /// "Encaisser" (-> PaymentScreen) ou "Mettre en attente".
@@ -184,17 +236,39 @@ class _CartLineTile extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 8),
-                Text(
-                  '${line.qte} x ${p.prixUnitaire.toStringAsFixed(0)} Ar = ${line.total.toStringAsFixed(0)} Ar',
-                  style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.green),
+                Row(
+                  children: [
+                    if (line.isRemise) ...[
+                      Text(
+                        '${p.prixUnitaire.toStringAsFixed(0)} Ar',
+                        style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted, decoration: TextDecoration.lineThrough),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Text(
+                        '${line.qte} x ${line.prixVente.toStringAsFixed(0)} Ar = ${line.total.toStringAsFixed(0)} Ar',
+                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: line.isRemise ? AppColors.orange : AppColors.green),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: onRemove,
-            icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.red),
-            tooltip: 'Annuler cette ligne',
+          Column(
+            children: [
+              IconButton(
+                onPressed: () => _editPrixVente(context, line),
+                icon: Icon(Icons.sell_rounded, size: 18, color: line.isRemise ? AppColors.orange : AppColors.textMuted),
+                tooltip: 'Modifier le prix de vente',
+              ),
+              IconButton(
+                onPressed: onRemove,
+                icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.red),
+                tooltip: 'Annuler cette ligne',
+              ),
+            ],
           ),
         ],
       ),

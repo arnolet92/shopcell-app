@@ -100,7 +100,11 @@ class VenteService {
         .map((l) => {
               'idProduit': l.produit.idProduits,
               'qteProduit': l.qte,
-              'prixProduit': l.produit.prixUnitaire,
+              // Prix de vente de la ligne (modifiable depuis le panier via le
+              // bouton "remise") — VenteMob::formatLstCmdArg() l'enregistre
+              // tel quel dans ventes.prix_ventes, sans jamais toucher au
+              // prix catalogue de l'article (produits.prix_unitaire).
+              'prixProduit': l.prixVente,
               'isConsigne': 0,
               'prixBouteille': 0,
               'idAcompagner': '',

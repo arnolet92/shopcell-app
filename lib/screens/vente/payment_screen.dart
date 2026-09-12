@@ -223,7 +223,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
-      final lines = CartService.instance.lines.map((l) => ReceiptLine.fromProduit(l.produit, qte: l.qte.toDouble())).toList();
+      // Prix unitaire imprimé = prix de vente effectif de la ligne (modifié
+      // ou non depuis le panier), pas le prix catalogue de l'article.
+      final lines = CartService.instance.lines
+          .map((l) => ReceiptLine(
+                designation: l.produit.designation,
+                qte: l.qte.toDouble(),
+                prixUnitaire: l.prixVente,
+                total: l.total,
+                numSerie: l.produit.numSerie,
+                imei1: l.produit.imei1,
+                imei2: l.produit.imei2,
+                nomModel: l.produit.nomModel,
+                nomMarque: l.produit.nomMarque,
+                nomTypePiece: l.produit.nomTypePiece,
+                nomSousCategoriePiece: l.produit.nomSousCategoriePiece,
+              ))
+          .toList();
       final printMessage = await ReceiptPrintService.instance.offerPrint(
         context,
         lines: lines,
