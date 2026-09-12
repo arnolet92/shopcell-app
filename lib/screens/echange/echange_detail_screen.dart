@@ -116,6 +116,18 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
 
   Map<String, dynamic>? get _entete => _facture?['entete'] as Map<String, dynamic>?;
 
+  /// La ligne vendue reprise (l'article "échangé", qui retourne en stock) —
+  /// c'est SON détail qui doit apparaître sur le ticket/A4 imprimé après
+  /// validation, pas celui du nouvel article remis au client.
+  Map<String, dynamic>? get _ligneRepris {
+    final lignes = (_facture?['lignes'] as List?) ?? [];
+    final match = lignes.cast<Map<String, dynamic>?>().firstWhere(
+          (l) => '${l?['id_ventes']}' == widget.idVentes,
+          orElse: () => null,
+        );
+    return match;
+  }
+
   void _onProduitSearchChanged(String v) {
     _debounceProduit?.cancel();
     _debounceProduit = Timer(const Duration(milliseconds: 400), () async {
@@ -244,24 +256,29 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       AppDataCache.instance.invalidate(CacheDomain.produits);
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
-      // Imprime uniquement le NOUVEL article remis au client (pas l'ancien
-      // repris en échange). P.U = prix ajouté, sauf si prix ajouté = 0
-      // (article "Non upgrade" ou repris à sa pleine valeur) : dans ce cas
-      // P.U = prix actuel (le prix de l'article remis).
+      // La description imprimée montre l'article ÉCHANGÉ (celui qui retourne
+      // en stock, repris au client), pas le nouvel article remis. P.U = prix
+      // ajouté, sauf si prix ajouté = 0 ("Non upgrade" ou repris à sa pleine
+      // valeur) : dans ce cas P.U = prix actuel (le prix de l'article remis).
       final entete = _entete;
+      final ligneRepris = _ligneRepris;
+      String? s(dynamic v) {
+        final t = v?.toString().trim();
+        return (t == null || t.isEmpty) ? null : t;
+      }
+
       final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
       final lines = [
         ReceiptLine(
-          designation: produit.designation,
+          designation: s(ligneRepris?['designation_produits']) ?? rec.oldDesignation ?? 'Article',
           qte: 1,
           prixUnitaire: prixUnitaireTicket,
           total: prixUnitaireTicket,
-          numSerie: produit.numSerie,
-          imei1: produit.imei1,
-          imei2: produit.imei2,
-          nomModel: produit.nomModel,
-          nomMarque: produit.nomMarque,
-          nomTypePiece: produit.nomTypePiece,
+          numSerie: s(ligneRepris?['num_serie']),
+          imei1: s(ligneRepris?['imei1']),
+          imei2: s(ligneRepris?['imei2']),
+          nomModel: s(ligneRepris?['nom_model']),
+          nomMarque: s(ligneRepris?['nom_marque']),
         ),
       ];
 

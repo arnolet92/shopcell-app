@@ -15,9 +15,12 @@ String _fmt(double v) {
 }
 
 /// Simple calculateur de prix, sans article ni enregistrement : juste les 3
-/// champs "prix actuel" / "prix de l'article en échange" / "prix ajouté"
-/// (même formule que l'échange réel), miroir de l'onglet "Simulation
-/// d'échange" côté web (`Echange/index`).
+/// champs "prix de l'article échangé (retourné)" / "prix actuel" (l'article
+/// en échange, sortie du stock) / "prix ajouté" (même formule que l'échange
+/// réel), miroir de l'onglet "Simulation d'échange" côté web
+/// (`Echange/index`). "Prix actuel" désigne toujours, comme partout ailleurs
+/// dans l'échange, le prix de l'article qui sort du stock — pas celui qui y
+/// retourne.
 class EchangeSimulationScreen extends StatefulWidget {
   const EchangeSimulationScreen({super.key});
 
@@ -26,22 +29,22 @@ class EchangeSimulationScreen extends StatefulWidget {
 }
 
 class _EchangeSimulationScreenState extends State<EchangeSimulationScreen> {
+  final _prixRetourneCtrl = TextEditingController();
   final _prixActuelCtrl = TextEditingController();
-  final _prixArticleEchangeCtrl = TextEditingController();
   double _prixAjoute = 0;
 
   @override
   void dispose() {
+    _prixRetourneCtrl.dispose();
     _prixActuelCtrl.dispose();
-    _prixArticleEchangeCtrl.dispose();
     super.dispose();
   }
 
   void _calc() {
+    final prixRetourne = double.tryParse(_prixRetourneCtrl.text.replaceAll(' ', '')) ?? 0;
     final prixActuel = double.tryParse(_prixActuelCtrl.text.replaceAll(' ', '')) ?? 0;
-    final prixArticleEchange = double.tryParse(_prixArticleEchangeCtrl.text.replaceAll(' ', '')) ?? 0;
-    final valeurReprise = prixActuel * 0.8;
-    final brut = (prixArticleEchange - valeurReprise) > 0 ? (prixArticleEchange - valeurReprise) : 0.0;
+    final valeurReprise = prixRetourne * 0.8;
+    final brut = (prixActuel - valeurReprise) > 0 ? (prixActuel - valeurReprise) : 0.0;
     setState(() {
       _prixAjoute = brut > 0 ? (brut / 50000).ceil() * 50000 : 0.0;
     });
@@ -68,17 +71,17 @@ class _EchangeSimulationScreenState extends State<EchangeSimulationScreen> {
               ),
               const SizedBox(height: 18),
               InlineField(
-                label: 'Prix actuel',
-                controller: _prixActuelCtrl,
-                prefixIcon: Icons.sell_rounded,
+                label: "Prix de l'article échangé (retourné en stock)",
+                controller: _prixRetourneCtrl,
+                prefixIcon: Icons.inventory_2_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _calc(),
               ),
               const SizedBox(height: 14),
               InlineField(
-                label: "Prix de l'article en échange (sortie du stock)",
-                controller: _prixArticleEchangeCtrl,
-                prefixIcon: Icons.inventory_2_rounded,
+                label: 'Prix actuel (article en échange, sortie du stock)',
+                controller: _prixActuelCtrl,
+                prefixIcon: Icons.sell_rounded,
                 keyboardType: TextInputType.number,
                 onChanged: (_) => _calc(),
               ),

@@ -108,19 +108,19 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
     double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
     final newPrixUnitaire = d(j['new_prix_unitaire']);
     final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : newPrixUnitaire;
+    // La description montre l'article ÉCHANGÉ (retourné en stock), pas le
+    // nouvel article remis au client.
     final lines = [
       ReceiptLine(
-        designation: s(j['new_designation']) ?? 'Article',
+        designation: s(j['old_designation']) ?? 'Article',
         qte: 1,
         prixUnitaire: prixUnitaireTicket,
         total: prixUnitaireTicket,
-        numSerie: s(j['new_num_serie']),
-        imei1: s(j['new_imei1']),
-        imei2: s(j['new_imei2']),
-        nomModel: s(j['new_nom_model']),
-        nomMarque: s(j['new_nom_marque']),
-        nomTypePiece: s(j['new_nom_type_piece']),
-        nomSousCategoriePiece: s(j['new_nom_batterie']),
+        numSerie: s(j['old_num_serie']),
+        imei1: s(j['old_imei1']),
+        imei2: s(j['old_imei2']),
+        nomModel: s(j['old_nom_model']),
+        nomMarque: s(j['old_nom_marque']),
       ),
     ];
 

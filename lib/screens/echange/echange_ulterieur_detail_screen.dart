@@ -163,19 +163,17 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
 
+      // La description montre l'article ÉCHANGÉ (repris, "retourné" en
+      // stock sous forme de nouvelle fiche produit) — ici juste sa
+      // désignation saisie, il n'a pas d'autre détail (N° série, IMEI...)
+      // puisqu'il n'existait pas encore dans le logiciel.
       final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
       final lines = [
         ReceiptLine(
-          designation: produit.designation,
+          designation: widget.designation,
           qte: 1,
           prixUnitaire: prixUnitaireTicket,
           total: prixUnitaireTicket,
-          numSerie: produit.numSerie,
-          imei1: produit.imei1,
-          imei2: produit.imei2,
-          nomModel: produit.nomModel,
-          nomMarque: produit.nomMarque,
-          nomTypePiece: produit.nomTypePiece,
         ),
       ];
 
@@ -236,7 +234,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
               ),
               const SizedBox(height: 14),
               InlineField(
-                label: "Prix actuel de l'article repris (Ar)",
+                label: "Prix de l'article échangé, retourné en stock (Ar)",
                 controller: _prixActuelReprisCtrl,
                 prefixIcon: Icons.price_change_rounded,
                 keyboardType: TextInputType.number,
