@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -5,6 +7,7 @@ import '../../core/theme.dart';
 import '../../models/facture_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/facture_service.dart';
 import '../auth/login_screen.dart';
 import '../credit/credit_clients_screen.dart';
 import '../echange/echange_search_screen.dart';
@@ -24,6 +27,11 @@ const _creditIndex = 4;
 const _facturesPayeesIndex = 5;
 const _facturesAnnuleesIndex = 6;
 const _parametresIndex = 7;
+// "Annulation en attente" (patron uniquement) est toujours ajoutée en
+// DERNIÈRE position par sidebarItemsFor() — voir app_sidebar.dart — donc son
+// index est simplement la longueur de la liste de base, jamais un index fixe
+// qui décalerait les autres comptes.
+final _annulationAttenteIndex = sidebarItems.length;
 
 /// Coquille principale post-connexion : sidebar ShopCell + zone de contenu.
 /// Page par défaut = Vente (demandé explicitement), la deuxième entrée
@@ -38,6 +46,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
   UserModel? _user;
+  int _pendingAnnulationCount = 0;
+  Timer? _pollTimer;
 
   static const _pageTitles = ['Vente', "Gestion d'article"];
   static final _pages = [
@@ -51,9 +61,36 @@ class _HomeShellState extends State<HomeShell> {
     _loadUser();
   }
 
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadUser() async {
     final user = await AuthService.instance.currentUser;
-    if (mounted) setState(() => _user = user);
+    if (!mounted) return;
+    setState(() => _user = user);
+    // Icône notification "Annulation en attente" : patron uniquement,
+    // rafraîchie périodiquement tant que l'app reste ouverte (pas de push
+    // serveur->mobile disponible ici, un simple polling suffit pour ce
+    // volume de données).
+    if (user?.role == 'patron') {
+      _pollAnnulationAttente();
+      _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) => _pollAnnulationAttente());
+    }
+  }
+
+  Future<void> _pollAnnulationAttente() async {
+    final count = await FactureService.instance.countAnnulationAttente(role: 'patron');
+    if (mounted) setState(() => _pendingAnnulationCount = count);
+  }
+
+  void _openAnnulationAttente() {
+    if (_user == null) return;
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => FactureListScreen(mode: FactureListMode.attente, user: _user!)))
+        .then((_) => _pollAnnulationAttente());
   }
 
   Future<void> _logout() async {
@@ -98,7 +135,41 @@ class _HomeShellState extends State<HomeShell> {
       }
       return;
     }
+    if (index == _annulationAttenteIndex) {
+      _openAnnulationAttente();
+      return;
+    }
     setState(() => _selectedIndex = index);
+  }
+
+  /// Icône notification "Annulation en attente" — patron uniquement, ne
+  /// s'affiche que s'il y a au moins une demande, clignote pour attirer
+  /// l'attention (voir BlinkingDot).
+  Widget? _bellIcon() {
+    if (_user?.role != 'patron' || _pendingAnnulationCount == 0) return null;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          onPressed: _openAnnulationAttente,
+          icon: const Icon(Icons.notifications_rounded, color: AppColors.orange),
+          tooltip: 'Annulation en attente',
+        ),
+        Positioned(
+          right: 6,
+          top: 6,
+          child: IgnorePointer(
+            child: BlinkingDot(
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(color: AppColors.orange, shape: BoxShape.circle),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -110,9 +181,11 @@ class _HomeShellState extends State<HomeShell> {
       onSelect: _select,
       user: _user,
       onLogout: _logout,
+      pendingAnnulationCount: _pendingAnnulationCount,
     );
 
     final content = IndexedStack(index: _selectedIndex, children: _pages);
+    final bell = _bellIcon();
 
     if (wide) {
       return Scaffold(
@@ -121,7 +194,14 @@ class _HomeShellState extends State<HomeShell> {
           children: [
             sidebar,
             const VerticalDivider(width: 1, color: AppColors.border),
-            Expanded(child: content),
+            Expanded(
+              child: Stack(
+                children: [
+                  content,
+                  if (bell != null) Positioned(top: 8, right: 12, child: bell),
+                ],
+              ),
+            ),
           ],
         ),
       );
@@ -137,6 +217,7 @@ class _HomeShellState extends State<HomeShell> {
           _pageTitles[_selectedIndex],
           style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary),
         ),
+        actions: [?bell],
       ),
       body: content,
     );

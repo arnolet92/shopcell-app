@@ -52,8 +52,10 @@ class _FactureListScreenState extends State<FactureListScreen> {
   String? _error;
 
   bool get _isPayee => widget.mode == FactureListMode.payee;
-  String get _titre => _isPayee ? 'Factures payées' : 'Factures annulées';
-  String get _labelDate => _isPayee ? 'Date de paiement' : "Date d'annulation";
+  bool get _isAttente => widget.mode == FactureListMode.attente;
+  String get _titre => _isPayee ? 'Factures payées' : (_isAttente ? 'Annulation en attente' : 'Factures annulées');
+  String get _labelDate => _isPayee ? 'Date de paiement' : (_isAttente ? 'Date de la demande' : "Date d'annulation");
+  Color get _accent => _isPayee ? AppColors.accentLight : (_isAttente ? AppColors.orange : AppColors.red);
 
   @override
   void initState() {
@@ -72,6 +74,10 @@ class _FactureListScreenState extends State<FactureListScreen> {
   /// fait un vrai appel réseau — jamais d'attente inutile si les données
   /// sont déjà là.
   Future<void> _loadFromCacheOrNetwork() async {
+    if (_isAttente) {
+      await _search();
+      return;
+    }
     final cached = _isPayee ? AppDataCache.instance.facturesPayees : AppDataCache.instance.facturesAnnulees;
     if (cached != null) {
       setState(() {
@@ -99,7 +105,9 @@ class _FactureListScreenState extends State<FactureListScreen> {
     try {
       final list = _isPayee
           ? await FactureService.instance.loadPayees(arg: arg, date1: d1, date2: d2)
-          : await FactureService.instance.loadAnnulees(arg: arg, date1: d1, date2: d2);
+          : _isAttente
+              ? await FactureService.instance.loadAnnulationAttente(role: widget.user.role, arg: arg, date1: d1, date2: d2)
+              : await FactureService.instance.loadAnnulees(arg: arg, date1: d1, date2: d2);
       if (!mounted) return;
       setState(() {
         _list = list;
@@ -107,8 +115,9 @@ class _FactureListScreenState extends State<FactureListScreen> {
       });
       // Résultat "sans filtre" : rafraîchit aussi le cache, pour que la
       // prochaine ouverture de cet écran réutilise ce résultat frais au
-      // lieu de repartir sur le réseau.
-      if (arg.isEmpty && d1 == null && d2 == null) {
+      // lieu de repartir sur le réseau. Pas de cache pour "en attente" —
+      // liste courte, propre au patron, qui doit toujours être à jour.
+      if (arg.isEmpty && d1 == null && d2 == null && !_isAttente) {
         if (_isPayee) {
           AppDataCache.instance.setFacturesPayees(list);
         } else {
@@ -191,18 +200,18 @@ class _FactureListScreenState extends State<FactureListScreen> {
                     margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [(_isPayee ? AppColors.accentGlow : AppColors.red.withValues(alpha: .16)), Colors.transparent]),
+                      gradient: LinearGradient(colors: [(_isPayee ? AppColors.accentGlow : _accent.withValues(alpha: .16)), Colors.transparent]),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: _isPayee ? AppColors.borderAccent : AppColors.red.withValues(alpha: .3)),
+                      border: Border.all(color: _isPayee ? AppColors.borderAccent : _accent.withValues(alpha: .3)),
                     ),
                     child: Row(children: [
-                      Icon(_isPayee ? Icons.receipt_long_rounded : Icons.block_rounded, color: _isPayee ? AppColors.accentLight : AppColors.red, size: 22),
+                      Icon(_isPayee ? Icons.receipt_long_rounded : (_isAttente ? Icons.hourglass_top_rounded : Icons.block_rounded), color: _accent, size: 22),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('${_list.length} facture${_list.length > 1 ? 's' : ''}',
                               style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-                          Text(_fmt(totalMontant), style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: _isPayee ? AppColors.accentLight : AppColors.red)),
+                          Text(_fmt(totalMontant), style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: _accent)),
                         ]),
                       ),
                     ]),
@@ -250,7 +259,7 @@ class _FactureListScreenState extends State<FactureListScreen> {
                                   itemBuilder: (context, i) => _FactureCard(
                                     item: _list[i],
                                     labelDate: _labelDate,
-                                    accent: _isPayee ? AppColors.accentLight : AppColors.red,
+                                    accent: _accent,
                                     onTap: () => _openDetail(_list[i]),
                                   ),
                                 ),

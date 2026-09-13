@@ -28,6 +28,16 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.settings_rounded, label: 'Paramètres'),
 ];
 
+/// "Annulation en attente" : réservé au patron (comme côté web), donc
+/// toujours ajouté en DERNIÈRE position plutôt qu'inséré au milieu de
+/// [sidebarItems] — ça évite de décaler les index fixes utilisés par
+/// HomeShell._select() pour les autres comptes.
+const _annulationAttenteItem = SidebarItemData(icon: Icons.hourglass_top_rounded, label: 'Annulation en attente');
+
+List<SidebarItemData> sidebarItemsFor(String? role) {
+  return role == 'patron' ? [...sidebarItems, _annulationAttenteItem] : sidebarItems;
+}
+
 /// Sidebar premium avec le logo ShopCell en tête, l'utilisateur connecté,
 /// puis le menu de navigation — dont "Gestion d'article" qui reprend
 /// l'organisation de l'écran web `Produit/lst`.
@@ -38,15 +48,20 @@ class AppSidebar extends StatelessWidget {
     required this.onSelect,
     required this.user,
     required this.onLogout,
+    this.pendingAnnulationCount = 0,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelect;
   final UserModel? user;
   final VoidCallback onLogout;
+  /// Nombre de lignes en attente d'annulation (patron uniquement) — affiché
+  /// en badge clignotant sur l'entrée "Annulation en attente".
+  final int pendingAnnulationCount;
 
   @override
   Widget build(BuildContext context) {
+    final items = sidebarItemsFor(user?.role);
     return Container(
       width: 264,
       color: AppColors.bgCard,
@@ -70,13 +85,14 @@ class AppSidebar extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: sidebarItems.length,
+                itemCount: items.length,
                 itemBuilder: (context, i) {
-                  final item = sidebarItems[i];
+                  final item = items[i];
                   final selected = i == selectedIndex;
                   return _SidebarTile(
                     item: item,
                     selected: selected,
+                    badgeCount: item.label == 'Annulation en attente' ? pendingAnnulationCount : 0,
                     onTap: () {
                       if (!item.enabled) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -156,12 +172,14 @@ class _SidebarTile extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.danger = false,
+    this.badgeCount = 0,
   });
 
   final SidebarItemData item;
   final bool selected;
   final bool danger;
   final VoidCallback onTap;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +215,7 @@ class _SidebarTile extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (badgeCount > 0) BlinkingDot(child: _CountBadge(count: badgeCount)),
                 if (!item.enabled && !danger)
                   const Icon(Icons.lock_clock_rounded, size: 14, color: AppColors.textMuted),
               ],
@@ -204,6 +223,55 @@ class _SidebarTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(color: AppColors.orange, borderRadius: BorderRadius.circular(20)),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.white),
+      ),
+    );
+  }
+}
+
+/// Fait clignoter (pulse d'opacité) l'enfant fourni — utilisé pour attirer
+/// l'œil sur "Annulation en attente" (badge) et l'icône notification
+/// (voir HomeShell) tant qu'il y a au moins une demande en attente.
+class BlinkingDot extends StatefulWidget {
+  const BlinkingDot({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<BlinkingDot> createState() => _BlinkingDotState();
+}
+
+class _BlinkingDotState extends State<BlinkingDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 800),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 1, end: 0.35).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
+      child: widget.child,
     );
   }
 }

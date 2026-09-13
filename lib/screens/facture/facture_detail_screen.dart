@@ -74,10 +74,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
   late String? _clientTelephone = widget.clientTelephone;
   late String? _clientCin = widget.clientCin;
 
-  bool get _peutAnnuler =>
-      widget.mode == FactureListMode.payee && (widget.user.role == 'patron' || widget.user.role == 'gerant');
+  // Annulation directe et définitive : réservée au patron (les autres
+  // comptes voient "Mettre en attente d'annulation" à la place — voir
+  // _peutMettreEnAttente ci-dessous et Facture/_facture_detail_row.php
+  // côté web pour la même règle).
+  bool get _peutAnnuler => widget.mode == FactureListMode.payee && widget.user.role == 'patron';
+  bool get _peutMettreEnAttente => widget.mode == FactureListMode.payee && widget.user.role != 'patron';
 
   String? _cancellingIdVentes;
+  String? _busyIdVentes;
 
   @override
   void initState() {
@@ -91,7 +96,9 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       _error = null;
     });
     try {
-      final detail = await FactureService.instance.loadDetail(widget.idClient);
+      final detail = widget.mode == FactureListMode.attente
+          ? await FactureService.instance.loadAnnulationAttenteDetail(role: widget.user.role, idClient: widget.idClient)
+          : await FactureService.instance.loadDetail(widget.idClient);
       if (!mounted) return;
       setState(() {
         _detail = detail;
@@ -122,6 +129,7 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     final result = await FactureService.instance.cancelArticle(
       idVentes: idVentes,
       role: widget.user.role,
+      user: widget.user,
       motif: result0.motif,
       mettreEnReparation: result0.mettreEnReparation,
     );
@@ -135,6 +143,105 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       // L'annulation restocke l'article (et éventuellement le met en
       // réparation) : le cache "Gestion d'article"/Vente doit lui aussi être
       // rafraîchi, pas seulement les factures payées.
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _load();
+    }
+  }
+
+  /// Comptes non-patron : signale une demande d'annulation au patron au lieu
+  /// d'annuler directement (voir _peutMettreEnAttente).
+  Future<void> _confirmMettreEnAttente(FactureDetailArticle article) async {
+    final idVentes = article.idVentes;
+    if (idVentes == null) return;
+    final motif = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.bgCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (context) => _MettreEnAttenteSheet(designation: article.designation),
+    );
+    if (motif == null) return;
+
+    setState(() => _cancellingIdVentes = idVentes);
+    final result = await FactureService.instance.mettreEnAttenteAnnulation(idVentes: idVentes, user: widget.user, motif: motif);
+    if (!mounted) return;
+    setState(() => _cancellingIdVentes = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Demande envoyée.' : 'Échec de la demande.'))),
+    );
+    if (result.success) {
+      _changed = true;
+      _load();
+    }
+  }
+
+  /// Écran "Annulation en attente" (patron) : refuse la demande, l'article
+  /// reste un article vendu normal.
+  Future<void> _confirmRemettreAttente(FactureDetailArticle article) async {
+    final idVentes = article.idVentes;
+    if (idVentes == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Remettre à la vente ?', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text(
+          "La demande d'annulation sera refusée : l'article reste vendu normalement.",
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Confirmer', style: TextStyle(color: AppColors.green))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _busyIdVentes = idVentes);
+    final result = await FactureService.instance.remettreALaVenteAttente(role: widget.user.role, idVentes: idVentes);
+    if (!mounted) return;
+    setState(() => _busyIdVentes = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article remis à la vente.' : 'Échec.'))),
+    );
+    if (result.success) {
+      _changed = true;
+      _load();
+    }
+  }
+
+  /// Écran "Annulation en attente" (patron) : valide la demande, exécute la
+  /// véritable annulation.
+  Future<void> _confirmAnnulerAttente(FactureDetailArticle article) async {
+    final idVentes = article.idVentes;
+    if (idVentes == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Annuler définitivement ?', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text(
+          'Cet article ressortira de la facture et reviendra en stock.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Retour')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Annuler définitivement', style: TextStyle(color: AppColors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _busyIdVentes = idVentes);
+    final result = await FactureService.instance.annulerDefinitivementAttente(role: widget.user.role, idVentes: idVentes, user: widget.user);
+    if (!mounted) return;
+    setState(() => _busyIdVentes = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article annulé définitivement.' : 'Échec.'))),
+    );
+    if (result.success) {
+      _changed = true;
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
       AppDataCache.instance.invalidate(CacheDomain.produits);
       _load();
@@ -267,7 +374,7 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
           elevation: 0,
           title: Text(widget.numeroFacture, style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary)),
           actions: [
-            if (_detail != null && (_detail!.actifs.isNotEmpty || _detail!.offerts.isNotEmpty))
+            if (widget.mode != FactureListMode.attente && _detail != null && (_detail!.actifs.isNotEmpty || _detail!.offerts.isNotEmpty))
               Padding(
                 padding: const EdgeInsets.only(right: 14),
                 child: _PrintPillButton(loading: _printing, onTap: _editClientAndPrint),
@@ -290,20 +397,22 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
                       backgroundColor: AppColors.bgCard,
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                        children: [
-                          if (_detail!.actifs.isNotEmpty) ..._section('Articles', Icons.inventory_2_rounded, AppColors.accentLight, _detail!.actifs),
-                          if (_detail!.offerts.isNotEmpty) ..._section('Articles offerts', Icons.card_giftcard_rounded, AppColors.green, _detail!.offerts),
-                          if (_detail!.annules.isNotEmpty) ..._section('Articles annulés', Icons.block_rounded, AppColors.red, _detail!.annules),
-                          if (_detail!.actifs.isEmpty && _detail!.offerts.isEmpty && _detail!.annules.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 24),
-                              child: Center(child: Text('Aucun article', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
-                            ),
-                          const SizedBox(height: 8),
-                          _paiementsSection(),
-                          const SizedBox(height: 16),
-                          _totauxCard(),
-                        ],
+                        children: widget.mode == FactureListMode.attente
+                            ? _attenteChildren()
+                            : [
+                                if (_detail!.actifs.isNotEmpty) ..._section('Articles', Icons.inventory_2_rounded, AppColors.accentLight, _detail!.actifs),
+                                if (_detail!.offerts.isNotEmpty) ..._section('Articles offerts', Icons.card_giftcard_rounded, AppColors.green, _detail!.offerts),
+                                if (_detail!.annules.isNotEmpty) ..._section('Articles annulés', Icons.block_rounded, AppColors.red, _detail!.annules),
+                                if (_detail!.actifs.isEmpty && _detail!.offerts.isEmpty && _detail!.annules.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 24),
+                                    child: Center(child: Text('Aucun article', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
+                                  ),
+                                const SizedBox(height: 8),
+                                _paiementsSection(),
+                                const SizedBox(height: 16),
+                                _totauxCard(),
+                              ],
                       ),
                     ),
         ),
@@ -321,10 +430,57 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       const SizedBox(height: 10),
       ...list.map((a) => _ArticleCard(
             article: a,
-            onCancel: _peutAnnuler && a.idVentes != null ? () => _confirmCancel(a) : null,
+            onCancel: _peutAnnuler && a.idVentes != null && !a.annulationAttente ? () => _confirmCancel(a) : null,
             cancelling: _cancellingIdVentes != null && _cancellingIdVentes == a.idVentes,
+            onMettreEnAttente: _peutMettreEnAttente && a.idVentes != null && !a.annulationAttente ? () => _confirmMettreEnAttente(a) : null,
           )),
       const SizedBox(height: 16),
+    ];
+  }
+
+  /// Contenu du mode "Annulation en attente" (patron) : les lignes en
+  /// attente ressortent dans leur propre section avec les 2 actions
+  /// (Remettre à la vente / Annuler définitivement), le reste de la facture
+  /// s'affiche en lecture seule — miroir mobile de
+  /// _facture_detail_row_attente.php côté web.
+  List<Widget> _attenteChildren() {
+    final pending = _detail!.actifs.where((a) => a.annulationAttente).toList();
+    final autres = _detail!.actifs.where((a) => !a.annulationAttente).toList();
+    return [
+      if (pending.isNotEmpty) ...[
+        Row(children: [
+          const Icon(Icons.hourglass_top_rounded, size: 15, color: AppColors.orange),
+          const SizedBox(width: 6),
+          Text("EN ATTENTE D'ANNULATION", style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.orange, letterSpacing: .04)),
+        ]),
+        const SizedBox(height: 10),
+        ...pending.map((a) => _ArticleCard(
+              article: a,
+              busy: _busyIdVentes != null && _busyIdVentes == a.idVentes,
+              onRemettreAttente: () => _confirmRemettreAttente(a),
+              onAnnulerAttente: () => _confirmAnnulerAttente(a),
+            )),
+        const SizedBox(height: 16),
+      ],
+      Row(children: [
+        const Icon(Icons.inventory_2_rounded, size: 15, color: AppColors.accentLight),
+        const SizedBox(width: 6),
+        Text('AUTRES ARTICLES', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accentLight, letterSpacing: .04)),
+      ]),
+      const SizedBox(height: 10),
+      if (autres.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text('Aucun autre article actif', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 12.5)),
+        )
+      else
+        ...autres.map((a) => _ArticleCard(article: a)),
+      if (_detail!.offerts.isNotEmpty) ..._section('Articles offerts', Icons.card_giftcard_rounded, AppColors.green, _detail!.offerts),
+      if (_detail!.annules.isNotEmpty) ..._section('Articles annulés', Icons.block_rounded, AppColors.red, _detail!.annules),
+      const SizedBox(height: 8),
+      _paiementsSection(),
+      const SizedBox(height: 16),
+      _totauxCard(),
     ];
   }
 
@@ -386,10 +542,25 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
 }
 
 class _ArticleCard extends StatelessWidget {
-  const _ArticleCard({required this.article, this.onCancel, this.cancelling = false});
+  const _ArticleCard({
+    required this.article,
+    this.onCancel,
+    this.cancelling = false,
+    this.onMettreEnAttente,
+    this.onRemettreAttente,
+    this.onAnnulerAttente,
+    this.busy = false,
+  });
   final FactureDetailArticle article;
   final VoidCallback? onCancel;
   final bool cancelling;
+  /// Comptes non-patron (voir _peutMettreEnAttente) : demande une
+  /// annulation au lieu d'annuler directement.
+  final VoidCallback? onMettreEnAttente;
+  /// Écran "Annulation en attente" (patron) : refuse/valide la demande.
+  final VoidCallback? onRemettreAttente;
+  final VoidCallback? onAnnulerAttente;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
@@ -449,6 +620,18 @@ class _ArticleCard extends StatelessWidget {
               Text('PU : ${_fmt(article.prixUnitaire ?? 0)}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
               Text(_fmt(article.montant ?? 0), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
             ]),
+          if (!estAnnule && article.annulationAttente && onRemettreAttente == null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: AppColors.orange.withValues(alpha: .12), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.orange.withValues(alpha: .35))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.hourglass_top_rounded, size: 13, color: AppColors.orange),
+                const SizedBox(width: 6),
+                Text("Annulation en attente", style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.orange)),
+              ]),
+            ),
+          ],
           if (onCancel != null) ...[
             const SizedBox(height: 8),
             Align(
@@ -462,6 +645,50 @@ class _ArticleCard extends StatelessWidget {
                       style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                     ),
             ),
+          ],
+          if (onMettreEnAttente != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: cancelling
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange))
+                  : TextButton.icon(
+                      onPressed: onMettreEnAttente,
+                      icon: const Icon(Icons.hourglass_top_rounded, size: 15, color: AppColors.orange),
+                      label: Text("Mettre en attente d'annulation", style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.orange)),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    ),
+            ),
+          ],
+          if (onRemettreAttente != null || onAnnulerAttente != null) ...[
+            const SizedBox(height: 10),
+            if (article.motifAnnulationAttente != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('Motif : ${article.motifAnnulationAttente}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.orange)),
+              ),
+            if (busy)
+              const Align(alignment: Alignment.centerRight, child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.orange)))
+            else
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onRemettreAttente,
+                    icon: const Icon(Icons.undo_rounded, size: 15, color: AppColors.green),
+                    label: Text('Remettre à la vente', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.green)),
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.green), padding: const EdgeInsets.symmetric(vertical: 8)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onAnnulerAttente,
+                    icon: const Icon(Icons.block_rounded, size: 15, color: AppColors.red),
+                    label: Text('Annuler définitivement', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.red)),
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.red), padding: const EdgeInsets.symmetric(vertical: 8)),
+                  ),
+                ),
+              ]),
           ],
         ],
       ),
@@ -556,6 +783,95 @@ class _CancelArticleSheetState extends State<_CancelArticleSheet> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text("Valider l'annulation", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Annuler', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Modal affiché avant de "mettre en attente d'annulation" un article
+/// (comptes non-patron) — miroir mobile de
+/// `Vente/mettre_en_attente_annulation_modal` côté web : juste un motif, pas
+/// d'interrupteur "mettre en réparation" (rien n'est réellement annulé à ce
+/// stade, ça n'a pas de sens de toucher au produit maintenant).
+class _MettreEnAttenteSheet extends StatefulWidget {
+  const _MettreEnAttenteSheet({required this.designation});
+  final String designation;
+
+  @override
+  State<_MettreEnAttenteSheet> createState() => _MettreEnAttenteSheetState();
+}
+
+class _MettreEnAttenteSheetState extends State<_MettreEnAttenteSheet> {
+  final _motifController = TextEditingController();
+
+  @override
+  void dispose() {
+    _motifController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + MediaQuery.of(context).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Mettre en attente d\'annulation "${widget.designation}"',
+            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Cette demande sera envoyée au patron : l'article reste actif sur la facture tant qu'il ne l'a pas validée.",
+            style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 16),
+          Text('Motif', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _motifController,
+            autofocus: true,
+            maxLines: 3,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: "Pourquoi voulez-vous annuler cet article...",
+              hintStyle: const TextStyle(color: AppColors.textMuted),
+              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.borderAccent), borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(_motifController.text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.orange,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Mettre en attente d'annulation", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             ),
           ),
           const SizedBox(height: 8),

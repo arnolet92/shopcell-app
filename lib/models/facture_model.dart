@@ -1,4 +1,4 @@
-enum FactureListMode { payee, annulee }
+enum FactureListMode { payee, annulee, attente }
 
 double _d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
 String? _s(dynamic v) {
@@ -102,6 +102,9 @@ class FactureDetailArticle {
     this.motif,
     this.dateAnnulation,
     this.idVentes,
+    this.annulationAttente = false,
+    this.motifAnnulationAttente,
+    this.dateAnnulationAttente,
   });
 
   final String designation;
@@ -126,6 +129,13 @@ class FactureDetailArticle {
   /// l'action d'annulation (`Mob/cancel_addition`, miroir de
   /// `Vente/cancel_addition`).
   final String? idVentes;
+  /// `ventes.annulation_attente` : demande d'annulation en attente de
+  /// validation par le patron (voir Facture/liste_Annulation_attente côté
+  /// web) — déjà exposé par Ventes::select_func() (ventes.*), donc présent
+  /// tel quel dans `Mob/facture_detail`/`Mob/annulation_attente_detail`.
+  final bool annulationAttente;
+  final String? motifAnnulationAttente;
+  final String? dateAnnulationAttente;
 
   factory FactureDetailArticle.fromActifJson(Map<String, dynamic> j) => FactureDetailArticle(
         designation: _s(j['designation_unite']) ?? _s(j['designation_produits']) ?? 'Article',
@@ -142,6 +152,9 @@ class FactureDetailArticle {
         prixUnitaire: _d(j['prix_ventes']),
         montant: _d(j['total_recette']),
         idVentes: _s(j['id_ventes']),
+        annulationAttente: '${j['annulation_attente'] ?? '0'}' == '1',
+        motifAnnulationAttente: _s(j['motif_annulation_attente']),
+        dateAnnulationAttente: _s(j['annulation_attente_at']),
       );
 
   factory FactureDetailArticle.fromAnnuleJson(Map<String, dynamic> j) => FactureDetailArticle(
