@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/theme.dart';
 import '../../models/lookup_model.dart';
 import '../../models/produit_model.dart';
+import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/produit_service.dart';
 import '../../widgets/autocomplete_lookup_field.dart';
@@ -22,11 +23,13 @@ class ProduitFormScreen extends StatefulWidget {
   const ProduitFormScreen({
     super.key,
     required this.filters,
+    required this.user,
     this.existing,
     this.existingImageUrl,
   });
 
   final ProduitFilters filters;
+  final UserModel user;
   final ProduitModel? existing;
   final String? existingImageUrl;
 
@@ -378,10 +381,17 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
             const SizedBox(height: 28),
             _SectionTitle('Stock & prix'),
             InlineField(label: 'Quantité', controller: _qte, keyboardType: TextInputType.number, prefixIcon: Icons.inventory_2_rounded),
-            const SizedBox(height: 20),
-            InlineField(label: "Prix d'achat (Ar)", controller: _prixAchats, keyboardType: TextInputType.number, prefixIcon: Icons.shopping_bag_rounded),
-            const SizedBox(height: 20),
-            InlineField(label: 'Prix de revient (Ar)', controller: _prixRevient, keyboardType: TextInputType.number, prefixIcon: Icons.calculate_rounded),
+            // Prix d'achat et prix de revient : réservés aux comptes
+            // patron/gérant/magasinier (mêmes rôles que dans la liste
+            // "Gestion d'article", voir UserModel.hasFullArticleAccess). Les
+            // contrôleurs restent initialisés avec la valeur existante même
+            // masqués, pour ne pas l'écraser à l'enregistrement.
+            if (widget.user.hasFullArticleAccess) ...[
+              const SizedBox(height: 20),
+              InlineField(label: "Prix d'achat (Ar)", controller: _prixAchats, keyboardType: TextInputType.number, prefixIcon: Icons.shopping_bag_rounded),
+              const SizedBox(height: 20),
+              InlineField(label: 'Prix de revient (Ar)', controller: _prixRevient, keyboardType: TextInputType.number, prefixIcon: Icons.calculate_rounded),
+            ],
             const SizedBox(height: 20),
             InlineField(label: 'Prix de vente (Ar)', controller: _prixUnitaire, keyboardType: TextInputType.number, prefixIcon: Icons.sell_rounded),
             const SizedBox(height: 20),

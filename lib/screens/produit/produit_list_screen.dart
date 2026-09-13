@@ -189,15 +189,17 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   }
 
   Future<void> _openCreate() async {
+    if (_user == null) return;
     final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => ProduitFormScreen(filters: _filters)),
+      MaterialPageRoute(builder: (_) => ProduitFormScreen(filters: _filters, user: _user!)),
     );
     if (saved == true) _reload();
   }
 
   Future<void> _openEdit(ProduitModel p, String? imageUrl) async {
+    if (_user == null) return;
     final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => ProduitFormScreen(filters: _filters, existing: p, existingImageUrl: imageUrl)),
+      MaterialPageRoute(builder: (_) => ProduitFormScreen(filters: _filters, user: _user!, existing: p, existingImageUrl: imageUrl)),
     );
     if (saved == true) _reload();
   }
