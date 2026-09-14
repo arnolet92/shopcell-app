@@ -38,6 +38,18 @@
 	<string>ShopCell a besoin du Bluetooth pour se connecter à l'imprimante ticket.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ShopCell a besoin d'accéder au réseau local pour se connecter au serveur ShopCell et à l'imprimante WiFi.</string>
+	<!-- Le serveur ShopCell est découvert par QR code (adresse LAN arbitraire,
+	     souvent en http:// simple sur un boîtier local, voir ApiClient) : sans
+	     cette exception, iOS (App Transport Security) bloque silencieusement
+	     toute requête vers une IP locale non-HTTPS, contrairement à Android
+	     (déjà autorisé via usesCleartextTraffic="true" dans AndroidManifest.xml).
+	     Une requête bloquée par ATS peut laisser un bouton d'action mobile
+	     tourner indéfiniment si l'appel réseau ne se termine jamais proprement. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -217,7 +217,9 @@ class _FactureListScreenState extends State<FactureListScreen> {
                     ]),
                   ),
                 InlineField(
-                  label: 'N° facture, désignation, N° série, IMEI...',
+                  label: _isPayee
+                      ? 'N° facture, nom, prénom, téléphone, CIN, désignation, N° série, IMEI...'
+                      : 'N° facture, désignation, N° série, IMEI...',
                   controller: _searchCtrl,
                   prefixIcon: Icons.search_rounded,
                   onSubmitted: (_) => _search(),
@@ -343,7 +345,16 @@ class _FactureCard extends StatelessWidget {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(item.nomAffiche, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis),
-                    Text(item.contactAffiche, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 2,
+                      children: [
+                        if (item.prenomAffiche != null) Text(item.prenomAffiche!, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                        if (item.contactAffiche != '-') Text(item.contactAffiche, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                        if (item.cinAffiche != null) Text('CIN: ${item.cinAffiche}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                      ],
+                    ),
                   ]),
                 ),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

@@ -126,13 +126,25 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     if (result0 == null) return;
 
     setState(() => _cancellingIdVentes = idVentes);
-    final result = await FactureService.instance.cancelArticle(
-      idVentes: idVentes,
-      role: widget.user.role,
-      user: widget.user,
-      motif: result0.motif,
-      mettreEnReparation: result0.mettreEnReparation,
-    );
+    // try/finally : un appel réseau qui échoue (timeout, serveur injoignable...)
+    // ne doit JAMAIS laisser le bouton tourner indéfiniment — constaté en
+    // direct sur iOS, où une requête bloquée ne relançait jamais setState
+    // faute de ce filet de sécurité.
+    FactureActionResult result;
+    try {
+      result = await FactureService.instance.cancelArticle(
+        idVentes: idVentes,
+        role: widget.user.role,
+        user: widget.user,
+        motif: result0.motif,
+        mettreEnReparation: result0.mettreEnReparation,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _cancellingIdVentes = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
     if (!mounted) return;
     setState(() => _cancellingIdVentes = null);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -164,7 +176,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     if (motif == null) return;
 
     setState(() => _cancellingIdVentes = idVentes);
-    final result = await FactureService.instance.mettreEnAttenteAnnulation(idVentes: idVentes, user: widget.user, motif: motif);
+    FactureActionResult result;
+    try {
+      result = await FactureService.instance.mettreEnAttenteAnnulation(idVentes: idVentes, user: widget.user, motif: motif);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _cancellingIdVentes = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
     if (!mounted) return;
     setState(() => _cancellingIdVentes = null);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -199,7 +219,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     if (ok != true) return;
 
     setState(() => _busyIdVentes = idVentes);
-    final result = await FactureService.instance.remettreALaVenteAttente(role: widget.user.role, idVentes: idVentes);
+    FactureActionResult result;
+    try {
+      result = await FactureService.instance.remettreALaVenteAttente(role: widget.user.role, idVentes: idVentes);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busyIdVentes = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
     if (!mounted) return;
     setState(() => _busyIdVentes = null);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -234,7 +262,15 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
     if (ok != true) return;
 
     setState(() => _busyIdVentes = idVentes);
-    final result = await FactureService.instance.annulerDefinitivementAttente(role: widget.user.role, idVentes: idVentes, user: widget.user);
+    FactureActionResult result;
+    try {
+      result = await FactureService.instance.annulerDefinitivementAttente(role: widget.user.role, idVentes: idVentes, user: widget.user);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busyIdVentes = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
+    }
     if (!mounted) return;
     setState(() => _busyIdVentes = null);
     ScaffoldMessenger.of(context).showSnackBar(

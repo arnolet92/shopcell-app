@@ -51,12 +51,12 @@ class FactureListItem {
 
   /// Nom à afficher : client enregistré, sinon visiteur de passage — même
   /// repli que `tab_payed.php`/`tab_cancel.php` (`is_null(personnes_id)`).
-  String get nomAffiche {
-    final complet = _s(nomComplet);
-    if (complet != null) return complet;
-    final visiteur = [_s(nomVisiteur), _s(prenomVisiteur)].whereType<String>().join(' ').trim();
-    return visiteur.isNotEmpty ? visiteur : 'Client';
-  }
+  /// Nom, prénom, téléphone, CIN affichés séparément (pas fusionnés) —
+  /// même repli client enregistré/visiteur que nomAffiche.
+  String get nomAffiche => _s(nomComplet) ?? _s(nomVisiteur) ?? 'Client';
+  String? get prenomAffiche => _s(prenomPersonnes) ?? _s(prenomVisiteur);
+  /// Un visiteur de passage n'a pas de CIN enregistré (seul `personnes` en a un).
+  String? get cinAffiche => personnesId != null ? _s(cinPersonnes) : null;
 
   String get contactAffiche => _s(telephone) ?? _s(telephoneVisiteur) ?? '-';
 
