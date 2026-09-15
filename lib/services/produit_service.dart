@@ -126,6 +126,11 @@ class ProduitService {
     String? systeme,
     String? idLieu,
     String? photoPath,
+    /// Uniquement envoyé quand l'article est actuellement en réparation
+    /// (voir ProduitFormScreen) — ne touche jamais motif_reparation_produits
+    /// sinon (isreparation_produits/motif_reparation_produits ne sont pas
+    /// autrement gérés par ce endpoint, voir Mob::save_produit()).
+    String? motifReparation,
   }) async {
     final fields = <String, String>{
       'designation_produits': designation,
@@ -153,6 +158,7 @@ class ProduitService {
     if (fournisseur != null) fields['produits_fournisseurs_id'] = fournisseur;
     if (systeme != null) fields['produits_systeme_id'] = systeme;
     if (idLieu != null) fields['produits_lieu_id'] = idLieu;
+    if (motifReparation != null) fields['motif_reparation_produits'] = motifReparation;
 
     final data = await ApiClient.instance.postMultipart(
       'save_produit',

@@ -59,6 +59,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
   late final TextEditingController _defaut;
   late final TextEditingController _fournisseur;
   late final TextEditingController _systeme;
+  late final TextEditingController _motifReparation;
 
   String? _lieuId;
   String? _lieuLabel;
@@ -94,6 +95,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
     _defaut = TextEditingController(text: p?.nomDefaut ?? '');
     _fournisseur = TextEditingController(text: p?.nomFrns ?? '');
     _systeme = TextEditingController(text: p?.nomSysteme ?? '');
+    _motifReparation = TextEditingController(text: p?.motifReparationProduits ?? '');
     if (p?.nomLieu != null) {
       _lieuLabel = p!.nomLieu;
       final match = widget.filters.lieux.where((l) => l.label == p.nomLieu);
@@ -106,6 +108,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
     for (final c in [
       _designation, _code, _codeBar, _numSerie, _imei1, _imei2, _qte, _prixAchats, _prixRevient, _prixUnitaire,
       _description, _famille, _modele, _marque, _couleur, _batterie, _carton, _defaut, _fournisseur, _systeme,
+      _motifReparation,
     ]) {
       c.dispose();
     }
@@ -229,6 +232,10 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
       defaut: _defaut.text.trim().isEmpty ? null : _defaut.text.trim(),
       fournisseur: _fournisseur.text.trim().isEmpty ? null : _fournisseur.text.trim(),
       systeme: _systeme.text.trim().isEmpty ? null : _systeme.text.trim(),
+      // Seulement si l'article est actuellement en réparation (champ visible
+      // uniquement dans ce cas) — ne touche jamais motif_reparation_produits
+      // pour un article qui n'est pas en réparation.
+      motifReparation: (widget.existing?.isReparationProduits ?? false) ? _motifReparation.text.trim() : null,
       idLieu: _lieuId,
       photoPath: _photoPath,
     );
@@ -347,11 +354,25 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
             ),
             const SizedBox(height: 20),
             AutocompleteLookupField(
-              label: 'Défaut',
+              // "Défaut" ici = classification pièce (produits_defaut_id), sans
+              // rapport avec le "motif de réparation" ci-dessous
+              // (isreparation_produits/motif_reparation_produits, géré par
+              // "Mise en réparation"/"Terminer la réparation") — libellé
+              // volontairement distinct pour ne plus confondre les deux,
+              // source de confusion signalée ("le défaut devient sans défaut").
+              label: 'Défaut (classification pièce)',
               controller: _defaut,
               suggestions: widget.filters.defauts.map((e) => e.label).toList(),
               prefixIcon: Icons.report_gmailerrorred_rounded,
             ),
+            if (widget.existing?.isReparationProduits ?? false) ...[
+              const SizedBox(height: 20),
+              InlineField(
+                label: 'Motif de réparation',
+                controller: _motifReparation,
+                prefixIcon: Icons.build_rounded,
+              ),
+            ],
             const SizedBox(height: 20),
             AutocompleteLookupField(
               label: 'Système',
