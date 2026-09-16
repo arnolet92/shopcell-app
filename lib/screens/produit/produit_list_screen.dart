@@ -302,6 +302,69 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     }
   }
 
+  Future<bool> _confirmDialog(String title, String message) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        content: Text(message, style: const TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Confirmer', style: TextStyle(color: AppColors.accentLight, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  // Onglet "Achat confirmé" — équivalent de Produit::entrer_en_stock_achat().
+  Future<void> _entrerEnStockAchat(ProduitModel p) async {
+    final ok = await _confirmDialog('Entrer en stock ?', 'Cet article deviendra vendable normalement.');
+    if (!ok || !mounted) return;
+    final result = await ProduitService.instance.entrerEnStockAchat(idProduits: p.idProduits);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article entré en stock.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
+  // Onglet "Achat en attente" (patron uniquement) — équivalent de
+  // Produit::confirmer_achat().
+  Future<void> _confirmerAchat(ProduitModel p) async {
+    final ok = await _confirmDialog('Confirmer cet achat ?', '');
+    if (!ok || !mounted) return;
+    final result = await ProduitService.instance.confirmerAchat(idProduits: p.idProduits);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Achat confirmé.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
+  // Bouton "Mettre en achat" de l'onglet "En attente" (patron uniquement) —
+  // équivalent de Produit::mettre_en_achat_depuis_attente().
+  Future<void> _mettreEnAchatDepuisAttente(ProduitModel p) async {
+    final ok = await _confirmDialog('Mettre cet article en achat ?', '');
+    if (!ok || !mounted) return;
+    final result = await ProduitService.instance.mettreEnAchatDepuisAttente(idProduits: p.idProduits);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Article mis en achat.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final groups = ProduitGroup.groupBy(_produits);
@@ -419,12 +482,19 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     imagesParDesignation: _imagesParDesignation,
                     showValiderAction: _vue == ProduitVue.attente,
                     restrictedInfo: restrictedInfo,
+                    isAchatConfirmeVue: _vue == ProduitVue.achatConfirme,
+                    isAchatAttenteVue: _vue == ProduitVue.achatAttente,
+                    showMettreEnAchatAction: _vue == ProduitVue.attente && _user?.role == 'patron',
+                    isPatron: _user?.role == 'patron',
                     onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
                     onValider: (p) => _valider(p, true),
                     onMiseEnReparation: _miseEnReparation,
                     onTerminerReparation: _terminerReparation,
                     onAddToCart: _addToCart,
                     onRemettreEnStock: _remettreEnStock,
+                    onEntrerEnStockAchat: _entrerEnStockAchat,
+                    onConfirmerAchat: _confirmerAchat,
+                    onMettreEnAchat: _mettreEnAchatDepuisAttente,
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
@@ -474,6 +544,8 @@ class _VueTabs extends StatelessWidget {
           chip(ProduitVue.apresEchange, 'Après échange', Icons.undo_rounded),
           chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
           chip(ProduitVue.reparation, 'Article en réparation', Icons.build_rounded),
+          chip(ProduitVue.achatConfirme, 'Achat confirmé', Icons.check_circle_rounded),
+          chip(ProduitVue.achatAttente, 'Achat en attente', Icons.hourglass_bottom_rounded),
         ],
       ),
     );

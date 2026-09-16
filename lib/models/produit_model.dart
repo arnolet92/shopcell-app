@@ -34,6 +34,9 @@ class ProduitModel {
     this.motifReparationProduits,
     this.isRepareeProduits = false,
     this.produitApresEchange = false,
+    this.bulk,
+    this.isAchat = false,
+    this.achatAttente = false,
   });
 
   final String idProduits;
@@ -66,6 +69,11 @@ class ProduitModel {
   /// Repris en échange, en attente de remise en stock explicite (voir
   /// Produit/lst_apres_echange côté web).
   final bool produitApresEchange;
+  /// Lot en gros ("Mettre en achat" du formulaire de création) : voir
+  /// Produit/lst_achat_confirme et Produit/lst_achat_attente côté web.
+  final String? bulk;
+  final bool isAchat;
+  final bool achatAttente;
 
   /// URL réelle de la photo, sur le même principe que
   /// `Media::get_url_file($id, $img, 'photo', 'produit', false)` côté web :
@@ -118,6 +126,9 @@ class ProduitModel {
       motifReparationProduits: _s(json['motif_reparation_produits']),
       isRepareeProduits: _d(json['isreparee_produits']) == 1,
       produitApresEchange: _d(json['produit_apres_echange']) == 1,
+      bulk: _s(json['bulk']),
+      isAchat: _d(json['is_achat']) == 1,
+      achatAttente: _d(json['achat_attente']) == 1,
     );
   }
 

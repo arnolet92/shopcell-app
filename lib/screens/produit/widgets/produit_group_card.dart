@@ -31,6 +31,10 @@ class ProduitGroupCard extends StatefulWidget {
     this.imagesParDesignation = const {},
     this.showValiderAction = false,
     this.restrictedInfo = false,
+    this.isAchatConfirmeVue = false,
+    this.isAchatAttenteVue = false,
+    this.showMettreEnAchatAction = false,
+    this.isPatron = false,
     this.onEdit,
     this.onValider,
     this.onMiseEnReparation,
@@ -38,6 +42,9 @@ class ProduitGroupCard extends StatefulWidget {
     this.onAddToCart,
     this.onTapUnit,
     this.onRemettreEnStock,
+    this.onEntrerEnStockAchat,
+    this.onConfirmerAchat,
+    this.onMettreEnAchat,
   });
 
   final ProduitGroup group;
@@ -48,6 +55,17 @@ class ProduitGroupCard extends StatefulWidget {
   /// modèle, n° de série, IMEI et batterie (masque achat/revient, capacité,
   /// couleur, carton, défaut, stockage, fournisseur, description).
   final bool restrictedInfo;
+  /// Onglet "Achat confirmé" (Produit::lst_achat_confirme) : affiche le
+  /// bouton "Entrer en stock" au lieu de "Mise en réparation".
+  final bool isAchatConfirmeVue;
+  /// Onglet "Achat en attente" (Produit::lst_achat_attente) : affiche le
+  /// bouton "Confirmer l'achat" (patron uniquement) au lieu de "Mise en
+  /// réparation".
+  final bool isAchatAttenteVue;
+  /// Onglet "En attente" (Produit::lst_attente), patron uniquement : affiche
+  /// en plus le bouton "Mettre en achat".
+  final bool showMettreEnAchatAction;
+  final bool isPatron;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
@@ -63,6 +81,9 @@ class ProduitGroupCard extends StatefulWidget {
   /// tap sur une unité — utilisé par la recherche intelligente pour ouvrir
   /// l'historique de l'article au lieu de la fiche produit.
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
+  final void Function(ProduitModel produit)? onEntrerEnStockAchat;
+  final void Function(ProduitModel produit)? onConfirmerAchat;
+  final void Function(ProduitModel produit)? onMettreEnAchat;
 
   @override
   State<ProduitGroupCard> createState() => _ProduitGroupCardState();
@@ -206,6 +227,10 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                               widget.baseUrl != null ? _groupImageUrl(group, widget.baseUrl!, widget.imagesParDesignation) : null,
                           showValiderAction: widget.showValiderAction,
                           restrictedInfo: widget.restrictedInfo,
+                          isAchatConfirmeVue: widget.isAchatConfirmeVue,
+                          isAchatAttenteVue: widget.isAchatAttenteVue,
+                          showMettreEnAchatAction: widget.showMettreEnAchatAction,
+                          isPatron: widget.isPatron,
                           onEdit: widget.onEdit,
                           onValider: widget.onValider,
                           onMiseEnReparation: widget.onMiseEnReparation,
@@ -213,6 +238,9 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           onAddToCart: widget.onAddToCart,
                           onTapUnit: widget.onTapUnit,
                           onRemettreEnStock: widget.onRemettreEnStock,
+                          onEntrerEnStockAchat: widget.onEntrerEnStockAchat,
+                          onConfirmerAchat: widget.onConfirmerAchat,
+                          onMettreEnAchat: widget.onMettreEnAchat,
                         )),
                   ],
                 ],
@@ -279,6 +307,10 @@ class _UnitRow extends StatelessWidget {
     required this.fallbackImageUrl,
     this.showValiderAction = false,
     this.restrictedInfo = false,
+    this.isAchatConfirmeVue = false,
+    this.isAchatAttenteVue = false,
+    this.showMettreEnAchatAction = false,
+    this.isPatron = false,
     this.onEdit,
     this.onValider,
     this.onMiseEnReparation,
@@ -286,6 +318,9 @@ class _UnitRow extends StatelessWidget {
     this.onAddToCart,
     this.onTapUnit,
     this.onRemettreEnStock,
+    this.onEntrerEnStockAchat,
+    this.onConfirmerAchat,
+    this.onMettreEnAchat,
   });
   final ProduitModel produit;
   final String Function(double) fmt;
@@ -293,6 +328,10 @@ class _UnitRow extends StatelessWidget {
   final String? fallbackImageUrl;
   final bool showValiderAction;
   final bool restrictedInfo;
+  final bool isAchatConfirmeVue;
+  final bool isAchatAttenteVue;
+  final bool showMettreEnAchatAction;
+  final bool isPatron;
   final void Function(ProduitModel produit, String? imageUrl)? onEdit;
   final void Function(ProduitModel produit)? onValider;
   final void Function(ProduitModel produit)? onMiseEnReparation;
@@ -300,6 +339,9 @@ class _UnitRow extends StatelessWidget {
   final void Function(ProduitModel produit)? onAddToCart;
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
   final void Function(ProduitModel produit)? onRemettreEnStock;
+  final void Function(ProduitModel produit)? onEntrerEnStockAchat;
+  final void Function(ProduitModel produit)? onConfirmerAchat;
+  final void Function(ProduitModel produit)? onMettreEnAchat;
 
   @override
   Widget build(BuildContext context) {
@@ -342,6 +384,15 @@ class _UnitRow extends StatelessWidget {
                     padding: EdgeInsets.only(right: 6),
                     child: Icon(Icons.build_circle_rounded, size: 14, color: AppColors.orange),
                   ),
+                if (produit.isAchat)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Icon(
+                      produit.achatAttente ? Icons.hourglass_bottom_rounded : Icons.check_circle_rounded,
+                      size: 14,
+                      color: produit.achatAttente ? AppColors.orange : AppColors.green,
+                    ),
+                  ),
                 Text(
                   '${fmt(produit.prixUnitaire)} Ar',
                   style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
@@ -352,14 +403,32 @@ class _UnitRow extends StatelessWidget {
                     tooltip: 'Remettre en stock',
                     onPressed: () => onRemettreEnStock!(produit),
                   )
-                else if (showValiderAction && onValider != null)
+                else if (isAchatConfirmeVue && onEntrerEnStockAchat != null)
+                  IconButton(
+                    icon: const Icon(Icons.move_to_inbox_rounded, size: 18, color: AppColors.green),
+                    tooltip: 'Entrer en stock',
+                    onPressed: () => onEntrerEnStockAchat!(produit),
+                  )
+                else if (isAchatAttenteVue && isPatron && onConfirmerAchat != null)
+                  IconButton(
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.green),
+                    tooltip: "Confirmer l'achat",
+                    onPressed: () => onConfirmerAchat!(produit),
+                  )
+                else if (showValiderAction && onValider != null) ...[
                   IconButton(
                     icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.green),
                     tooltip: 'Valider',
                     onPressed: () => onValider!(produit),
-                  )
-                else ...[
-                  if (onAddToCart != null && produit.totalStock > 0 && !produit.isReparationProduits && !produit.produitApresEchange)
+                  ),
+                  if (showMettreEnAchatAction && onMettreEnAchat != null)
+                    IconButton(
+                      icon: const Icon(Icons.shopping_bag_rounded, size: 17, color: AppColors.accentLight),
+                      tooltip: 'Mettre en achat',
+                      onPressed: () => onMettreEnAchat!(produit),
+                    ),
+                ] else ...[
+                  if (onAddToCart != null && produit.totalStock > 0 && !produit.isReparationProduits && !produit.produitApresEchange && !produit.isAchat)
                     IconButton(
                       icon: const Icon(Icons.add_shopping_cart_rounded, size: 17, color: AppColors.green),
                       tooltip: 'Ajouter au ticket',
@@ -397,6 +466,15 @@ class _UnitRow extends StatelessWidget {
                 child: Text(
                   'Motif : ${produit.motifReparationProduits}',
                   style: GoogleFonts.inter(fontSize: 11, color: AppColors.orange, fontStyle: FontStyle.italic),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            if (produit.isAchat && (produit.bulk ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text(
+                  'Bulk : ${produit.bulk}',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.accentLight, fontStyle: FontStyle.italic),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

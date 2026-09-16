@@ -60,11 +60,15 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
   late final TextEditingController _fournisseur;
   late final TextEditingController _systeme;
   late final TextEditingController _motifReparation;
+  late final TextEditingController _bulk;
 
   String? _lieuId;
   String? _lieuLabel;
   DateTime? _datePeremption;
   bool _enAttente = false;
+  // Switch "Mettre en achat" (lot en gros) : uniquement à la création, voir
+  // Produit/addprod.php côté web. Mutuellement exclusif avec _enAttente.
+  bool _achatMode = false;
   String? _photoPath;
   bool _submitting = false;
   String? _error;
@@ -96,6 +100,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
     _fournisseur = TextEditingController(text: p?.nomFrns ?? '');
     _systeme = TextEditingController(text: p?.nomSysteme ?? '');
     _motifReparation = TextEditingController(text: p?.motifReparationProduits ?? '');
+    _bulk = TextEditingController();
     if (p?.nomLieu != null) {
       _lieuLabel = p!.nomLieu;
       final match = widget.filters.lieux.where((l) => l.label == p.nomLieu);
@@ -108,7 +113,7 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
     for (final c in [
       _designation, _code, _codeBar, _numSerie, _imei1, _imei2, _qte, _prixAchats, _prixRevient, _prixUnitaire,
       _description, _famille, _modele, _marque, _couleur, _batterie, _carton, _defaut, _fournisseur, _systeme,
-      _motifReparation,
+      _motifReparation, _bulk,
     ]) {
       c.dispose();
     }
@@ -196,9 +201,13 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
 
   double _parse(TextEditingController c) => double.tryParse(c.text.replaceAll(' ', '').replaceAll(',', '.')) ?? 0;
 
-  Future<void> _submit() async {
+  Future<void> _submit({String? achatAction}) async {
     if (_designation.text.trim().isEmpty) {
       setState(() => _error = "La désignation est obligatoire.");
+      return;
+    }
+    if (achatAction != null && _bulk.text.trim().isEmpty) {
+      setState(() => _error = 'Le champ Bulk est obligatoire.');
       return;
     }
     setState(() {
@@ -238,6 +247,8 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
       motifReparation: (widget.existing?.isReparationProduits ?? false) ? _motifReparation.text.trim() : null,
       idLieu: _lieuId,
       photoPath: _photoPath,
+      bulk: achatAction != null ? _bulk.text.trim() : null,
+      achatAction: achatAction,
     );
 
     if (!mounted) return;
@@ -438,11 +449,32 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
             const SizedBox(height: 12),
             SwitchListTile(
               value: _enAttente,
-              onChanged: (v) => setState(() => _enAttente = v),
+              onChanged: (v) => setState(() {
+                _enAttente = v;
+                if (v) _achatMode = false;
+              }),
               activeThumbColor: AppColors.accent,
               contentPadding: EdgeInsets.zero,
               title: const Text('Mettre en attente de validation', style: TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
             ),
+            // Switch "Mettre en achat" (lot en gros) : uniquement à la
+            // création, mutuellement exclusif avec "Mettre en attente".
+            if (!_isEdit) ...[
+              SwitchListTile(
+                value: _achatMode,
+                onChanged: (v) => setState(() {
+                  _achatMode = v;
+                  if (v) _enAttente = false;
+                }),
+                activeThumbColor: AppColors.green,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Mettre en achat', style: TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
+              ),
+              if (_achatMode) ...[
+                const SizedBox(height: 12),
+                InlineField(label: 'Bulk *', controller: _bulk, prefixIcon: Icons.inventory_2_rounded),
+              ],
+            ],
 
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -450,12 +482,29 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
             ],
 
             const SizedBox(height: 26),
-            GradientButton(
-              label: _isEdit ? 'Enregistrer les modifications' : "Créer l'article",
-              icon: Icons.check_rounded,
-              loading: _submitting,
-              onPressed: _submit,
-            ),
+            if (!_isEdit && _achatMode) ...[
+              if (widget.user.role == 'patron') ...[
+                GradientButton(
+                  label: "Confirmer l'achat",
+                  icon: Icons.check_circle_rounded,
+                  loading: _submitting,
+                  onPressed: () => _submit(achatAction: 'confirmer'),
+                ),
+                const SizedBox(height: 12),
+              ],
+              GradientButton(
+                label: "Mettre l'achat en attente",
+                icon: Icons.hourglass_bottom_rounded,
+                loading: _submitting,
+                onPressed: () => _submit(achatAction: 'attente'),
+              ),
+            ] else
+              GradientButton(
+                label: _isEdit ? 'Enregistrer les modifications' : "Créer l'article",
+                icon: Icons.check_rounded,
+                loading: _submitting,
+                onPressed: () => _submit(),
+              ),
           ],
         ),
       ),

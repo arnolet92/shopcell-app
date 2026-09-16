@@ -2,11 +2,13 @@ import '../core/api_client.dart';
 import '../models/lookup_model.dart';
 import '../models/produit_model.dart';
 
-/// Les 4 vues de la gestion d'article côté web : `Produit::lst()` (tous),
+/// Les vues de la gestion d'article côté web : `Produit::lst()` (tous),
 /// `Produit::lst_attente()` (articles en attente de validation),
 /// `Produit::lst_vente()` (articles totalement épuisés),
-/// `Produit::lst_reparation()` (articles actuellement en réparation).
-enum ProduitVue { tous, attente, vente, reparation, apresEchange }
+/// `Produit::lst_reparation()` (articles actuellement en réparation),
+/// `Produit::lst_achat_confirme()`/`lst_achat_attente()` (lots "Mettre en
+/// achat" du formulaire de création, confirmés ou non).
+enum ProduitVue { tous, attente, vente, reparation, apresEchange, achatConfirme, achatAttente }
 
 class SaveProduitResult {
   SaveProduitResult({required this.success, this.message, this.idProduits});
@@ -45,6 +47,8 @@ class ProduitService {
         ProduitVue.vente => 'vente',
         ProduitVue.reparation => 'reparation',
         ProduitVue.apresEchange => 'apres_echange',
+        ProduitVue.achatConfirme => 'achat_confirme',
+        ProduitVue.achatAttente => 'achat_attente',
       },
     };
     if (recherche != null && recherche.trim().isNotEmpty) fields['arg'] = recherche.trim();
@@ -131,6 +135,15 @@ class ProduitService {
     /// sinon (isreparation_produits/motif_reparation_produits ne sont pas
     /// autrement gérés par ce endpoint, voir Mob::save_produit()).
     String? motifReparation,
+    /// Description du lot, envoyée avec [achatAction] quand le switch
+    /// "Mettre en achat" du formulaire de création est actif.
+    String? bulk,
+    /// 'confirmer' ou 'attente' — voir le switch "Mettre en achat" de
+    /// ProduitFormScreen (mutuellement exclusif avec [enAttente]) ; ignoré
+    /// côté serveur en modification (Mob::save_produit() ne l'applique qu'à
+    /// la création). 'confirmer' retombe automatiquement sur "attente" côté
+    /// serveur si le compte connecté n'est pas patron.
+    String? achatAction,
   }) async {
     final fields = <String, String>{
       'designation_produits': designation,
@@ -159,6 +172,8 @@ class ProduitService {
     if (systeme != null) fields['produits_systeme_id'] = systeme;
     if (idLieu != null) fields['produits_lieu_id'] = idLieu;
     if (motifReparation != null) fields['motif_reparation_produits'] = motifReparation;
+    if (bulk != null) fields['bulk'] = bulk;
+    if (achatAction != null) fields['achat_action'] = achatAction;
 
     final data = await ApiClient.instance.postMultipart(
       'save_produit',
@@ -213,6 +228,33 @@ class ProduitService {
   /// de `Produit::remettre_en_stock()`.
   Future<SaveProduitResult> remettreEnStock({required String idProduits}) async {
     final data = await ApiClient.instance.post('remettre_en_stock', fields: {'id_produits': idProduits});
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Onglet "Achat confirmé" : l'article devient vendable normalement —
+  /// équivalent de `Produit::entrer_en_stock_achat()`.
+  Future<SaveProduitResult> entrerEnStockAchat({required String idProduits}) async {
+    final data = await ApiClient.instance.post('entrer_en_stock_achat', fields: {'id_produits': idProduits});
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Onglet "Achat en attente" (patron uniquement) — équivalent de
+  /// `Produit::confirmer_achat()`.
+  Future<SaveProduitResult> confirmerAchat({required String idProduits}) async {
+    final data = await ApiClient.instance.post('confirmer_achat', fields: {'id_produits': idProduits});
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Bouton "Mettre en achat" de Produit/lst_attente (patron uniquement) —
+  /// équivalent de `Produit::mettre_en_achat_depuis_attente()`.
+  Future<SaveProduitResult> mettreEnAchatDepuisAttente({required String idProduits}) async {
+    final data = await ApiClient.instance.post('mettre_en_achat_depuis_attente', fields: {'id_produits': idProduits});
     if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
     final error = data['error'] == true;
     return SaveProduitResult(success: !error, message: data['msg']?.toString());
