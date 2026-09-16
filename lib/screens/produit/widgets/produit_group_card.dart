@@ -45,6 +45,9 @@ class ProduitGroupCard extends StatefulWidget {
     this.onEntrerEnStockAchat,
     this.onConfirmerAchat,
     this.onMettreEnAchat,
+    this.selectionMode = false,
+    this.selectedIds = const {},
+    this.onCheckChanged,
   });
 
   final ProduitGroup group;
@@ -84,6 +87,11 @@ class ProduitGroupCard extends StatefulWidget {
   final void Function(ProduitModel produit)? onEntrerEnStockAchat;
   final void Function(ProduitModel produit)? onConfirmerAchat;
   final void Function(ProduitModel produit)? onMettreEnAchat;
+  /// Sélection multiple (onglet "Achat confirmé", vue "Sans bulk") : affiche
+  /// une case à cocher sur chaque unité "en achat confirmé".
+  final bool selectionMode;
+  final Set<String> selectedIds;
+  final void Function(String idProduits, bool checked)? onCheckChanged;
 
   @override
   State<ProduitGroupCard> createState() => _ProduitGroupCardState();
@@ -241,6 +249,9 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           onEntrerEnStockAchat: widget.onEntrerEnStockAchat,
                           onConfirmerAchat: widget.onConfirmerAchat,
                           onMettreEnAchat: widget.onMettreEnAchat,
+                          selectionMode: widget.selectionMode,
+                          checked: widget.selectedIds.contains(p.idProduits),
+                          onCheckChanged: widget.onCheckChanged == null ? null : (v) => widget.onCheckChanged!(p.idProduits, v),
                         )),
                   ],
                 ],
@@ -321,6 +332,9 @@ class _UnitRow extends StatelessWidget {
     this.onEntrerEnStockAchat,
     this.onConfirmerAchat,
     this.onMettreEnAchat,
+    this.selectionMode = false,
+    this.checked = false,
+    this.onCheckChanged,
   });
   final ProduitModel produit;
   final String Function(double) fmt;
@@ -342,6 +356,9 @@ class _UnitRow extends StatelessWidget {
   final void Function(ProduitModel produit)? onEntrerEnStockAchat;
   final void Function(ProduitModel produit)? onConfirmerAchat;
   final void Function(ProduitModel produit)? onMettreEnAchat;
+  final bool selectionMode;
+  final bool checked;
+  final ValueChanged<bool>? onCheckChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -365,6 +382,18 @@ class _UnitRow extends StatelessWidget {
           children: [
             Row(
               children: [
+                if (selectionMode && produit.isAchat && !produit.achatAttente) ...[
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: Checkbox(
+                      value: checked,
+                      activeColor: AppColors.green,
+                      onChanged: onCheckChanged == null ? null : (v) => onCheckChanged!(v ?? false),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
                 const Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: AppColors.textMuted),
                 const SizedBox(width: 8),
                 Expanded(

@@ -467,6 +467,11 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         achatFiltres = _produits.where((p) => (p.bulk ?? '').trim() == _bulkFiltreActif).toList();
       }
     }
+    // Même présentation groupée par désignation que les autres onglets
+    // (voir Produit/lst côté web), au lieu d'une simple liste à plat.
+    final achatGroups = isAchatConfirmeVue ? ProduitGroup.groupBy(achatFiltres) : const <ProduitGroup>[];
+    final isAchatSansBulk = _bulkFiltreActif == '__sans_bulk__';
+    final isAchatBulkNomme = isAchatConfirmeVue && !isAchatSansBulk && _bulkFiltreActif != '__tous__';
 
     final cart = CartService.instance;
 
@@ -499,9 +504,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         ],
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-          RefreshIndicator(
+        child: RefreshIndicator(
           color: AppColors.accentLight,
           backgroundColor: AppColors.bgCard,
           onRefresh: _bootstrap,
@@ -560,11 +563,18 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     sansBulkCount: sansBulkCount,
                     bulkCounts: bulkCounts,
                     bulkNames: bulkNames,
-                    canOrganize: _canOrganizeBulk,
                     onChanged: _onBulkFiltreChanged,
-                    onEntrerToutStock: _entrerToutStock,
                   ),
                 ),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                if (isAchatBulkNomme && _canOrganizeBulk)
+                  SliverToBoxAdapter(
+                    child: _EntrerToutStockHeader(bulk: _bulkFiltreActif, onTap: () => _entrerToutStock(_bulkFiltreActif)),
+                  )
+                else if (isAchatSansBulk && _selectedBulkIds.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _DeplacerHeader(count: _selectedBulkIds.length, onDeplacer: () => _ouvrirModalDeplacer(bulkNames)),
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 10)),
               ],
               const SliverToBoxAdapter(child: SizedBox(height: 4)),
@@ -579,17 +589,22 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   child: _ErrorState(message: _error!, onRetry: _reload),
                 )
               else if (isAchatConfirmeVue)
-                if (achatFiltres.isEmpty)
+                if (achatGroups.isEmpty)
                   const SliverFillRemaining(hasScrollBody: false, child: _EmptyState())
                 else
                   SliverList.builder(
-                    itemCount: achatFiltres.length,
-                    itemBuilder: (context, i) => _AchatArticleRow(
-                      produit: achatFiltres[i],
-                      showCheckbox: _bulkFiltreActif == '__sans_bulk__',
-                      checked: _selectedBulkIds.contains(achatFiltres[i].idProduits),
-                      onCheckChanged: (v) => _onBulkCheckChanged(achatFiltres[i].idProduits, v),
-                      onEntrerEnStock: _entrerEnStockAchat,
+                    itemCount: achatGroups.length,
+                    itemBuilder: (context, i) => ProduitGroupCard(
+                      group: achatGroups[i],
+                      baseUrl: _baseUrl,
+                      imagesParDesignation: _imagesParDesignation,
+                      restrictedInfo: restrictedInfo,
+                      isAchatConfirmeVue: true,
+                      onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
+                      onEntrerEnStockAchat: _entrerEnStockAchat,
+                      selectionMode: isAchatSansBulk,
+                      selectedIds: _selectedBulkIds,
+                      onCheckChanged: _onBulkCheckChanged,
                     ),
                   )
               else if (groups.isEmpty)
@@ -621,16 +636,9 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onMettreEnAchat: _mettreEnAchatDepuisAttente,
                   ),
                 ),
-              SliverToBoxAdapter(child: SizedBox(height: _selectedBulkIds.isNotEmpty ? 140 : 90)),
+              const SliverToBoxAdapter(child: SizedBox(height: 90)),
             ],
           ),
-          ),
-          _DeplacerFloatingBar(
-            visible: _selectedBulkIds.isNotEmpty,
-            count: _selectedBulkIds.length,
-            onDeplacer: () => _ouvrirModalDeplacer(bulkNames),
-          ),
-          ],
         ),
       ),
     );
@@ -728,10 +736,11 @@ class _ErrorState extends StatelessWidget {
 
 /// Panneau "classeurs" de l'onglet "Achat confirmé" — équivalent mobile du
 /// panneau de gauche (1/4) de `Produit/lst_achat_confirme` côté web : une
-/// barre horizontale de chips (au lieu d'une colonne, écran étroit oblige)
-/// avec "Afficher tout", un chip par bulk (avec son compteur et, pour
-/// patron/gérant, un bouton "Entrer tout dans stock"), puis "Sans bulk"
-/// (sélectionné par défaut).
+/// barre horizontale de chips (au lieu d'une colonne, écran étroit oblige) —
+/// "Sans bulk" (sélectionné par défaut) en premier, puis "Afficher tout",
+/// puis un chip par bulk existant. Les actions ("Entrer tout dans stock",
+/// "Déplacer sur un bulk") sont affichées séparément en haut de la liste
+/// d'articles, pas ici (voir _EntrerToutStockHeader/_DeplacerHeader).
 class _BulkFiltreBar extends StatelessWidget {
   const _BulkFiltreBar({
     required this.filtreActif,
@@ -739,9 +748,7 @@ class _BulkFiltreBar extends StatelessWidget {
     required this.sansBulkCount,
     required this.bulkCounts,
     required this.bulkNames,
-    required this.canOrganize,
     required this.onChanged,
-    required this.onEntrerToutStock,
   });
 
   final String filtreActif;
@@ -749,19 +756,11 @@ class _BulkFiltreBar extends StatelessWidget {
   final int sansBulkCount;
   final Map<String, int> bulkCounts;
   final List<String> bulkNames;
-  final bool canOrganize;
   final ValueChanged<String> onChanged;
-  final ValueChanged<String> onEntrerToutStock;
 
   @override
   Widget build(BuildContext context) {
-    Widget chip({
-      required String key,
-      required String label,
-      required IconData icon,
-      required int count,
-      VoidCallback? onEntrerTout,
-    }) {
+    Widget chip({required String key, required String label, required IconData icon, required int count}) {
       final selected = filtreActif == key;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
@@ -780,51 +779,27 @@ class _BulkFiltreBar extends StatelessWidget {
               border: Border.all(color: selected ? Colors.transparent : AppColors.border),
               boxShadow: selected ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 13, color: selected ? Colors.white : AppColors.textSecondary),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        label,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textPrimary),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: selected ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('$count', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textSecondary)),
-                    ),
-                  ],
-                ),
-                if (onEntrerTout != null) ...[
-                  const SizedBox(height: 6),
-                  InkWell(
-                    onTap: onEntrerTout,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: selected ? Colors.white.withValues(alpha: 0.2) : AppColors.green.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Entrer tout dans stock',
-                        style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.green),
-                      ),
-                    ),
+                Icon(icon, size: 13, color: selected ? Colors.white : AppColors.textSecondary),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textPrimary),
                   ),
-                ],
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('$count', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textSecondary)),
+                ),
               ],
             ),
           ),
@@ -837,182 +812,107 @@ class _BulkFiltreBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          chip(key: '__tous__', label: 'Afficher tout', icon: Icons.layers_rounded, count: totalCount),
-          for (final name in bulkNames)
-            chip(
-              key: name,
-              label: name,
-              icon: Icons.folder_rounded,
-              count: bulkCounts[name] ?? 0,
-              onEntrerTout: canOrganize ? () => onEntrerToutStock(name) : null,
-            ),
           chip(key: '__sans_bulk__', label: 'Les articles sans bulk', icon: Icons.help_outline_rounded, count: sansBulkCount),
+          chip(key: '__tous__', label: 'Afficher tout', icon: Icons.layers_rounded, count: totalCount),
+          for (final name in bulkNames) chip(key: name, label: name, icon: Icons.folder_rounded, count: bulkCounts[name] ?? 0),
         ],
       ),
     );
   }
 }
 
-/// Ligne détaillée d'un article (onglet "Achat confirmé") — équivalent
-/// mobile d'une `.aca-row` de `tabproduit_achat_confirme_articles.php` côté
-/// web : case à cocher (vue "Sans bulk" uniquement), désignation, n° série,
-/// badge bulk, prix, et bouton "Entrer en stock".
-class _AchatArticleRow extends StatelessWidget {
-  const _AchatArticleRow({
-    required this.produit,
-    required this.showCheckbox,
-    required this.checked,
-    required this.onCheckChanged,
-    this.onEntrerEnStock,
-  });
-
-  final ProduitModel produit;
-  final bool showCheckbox;
-  final bool checked;
-  final ValueChanged<bool> onCheckChanged;
-  final void Function(ProduitModel produit)? onEntrerEnStock;
-
-  String _fmt(double v) {
-    final s = v.round().toString();
-    final buf = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-      buf.write(s[i]);
-    }
-    return buf.toString();
-  }
+/// Bouton "Entrer tout dans stock" (classeur nommé sélectionné, patron/gérant
+/// uniquement) — affiché en haut de la liste d'articles, comme
+/// `.aca-entrer-tout-header` côté web.
+class _EntrerToutStockHeader extends StatelessWidget {
+  const _EntrerToutStockHeader({required this.bulk, required this.onTap});
+  final String bulk;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final bulk = (produit.bulk ?? '').trim();
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF10131C), AppColors.bgElevated],
-        ),
+        gradient: LinearGradient(colors: [AppColors.green.withValues(alpha: 0.1), AppColors.green.withValues(alpha: 0.03)]),
+        border: Border.all(color: AppColors.green.withValues(alpha: 0.25)),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
-          if (showCheckbox) ...[
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: Checkbox(
-                value: checked,
-                activeColor: AppColors.green,
-                onChanged: (v) => onCheckChanged(v ?? false),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  produit.designation,
-                  style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      produit.numSerie ?? 'Réf. ${produit.idProduits}',
-                      style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: (bulk.isEmpty ? AppColors.textMuted : AppColors.green).withValues(alpha: 0.12),
-                        border: Border.all(color: (bulk.isEmpty ? AppColors.textMuted : AppColors.green).withValues(alpha: 0.3)),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Text(
-                        bulk.isEmpty ? 'Sans bulk' : bulk,
-                        style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: bulk.isEmpty ? AppColors.textSecondary : AppColors.green),
-                      ),
-                    ),
-                  ],
+                const Icon(Icons.folder_open_rounded, size: 16, color: AppColors.textPrimary),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Classeur « $bulk »',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            '${_fmt(produit.prixUnitaire)} Ar',
-            style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.green),
-          ),
-          if (onEntrerEnStock != null) ...[
-            const SizedBox(width: 6),
-            IconButton(
-              icon: const Icon(Icons.move_to_inbox_rounded, size: 19, color: AppColors.green),
-              tooltip: 'Entrer en stock',
-              onPressed: () => onEntrerEnStock!(produit),
+          ElevatedButton.icon(
+            onPressed: onTap,
+            icon: const Icon(Icons.move_to_inbox_rounded, size: 16),
+            label: const Text('Entrer tout dans stock'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.green,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// Barre flottante "Déplacer sur un bulk" (sélection active en vue "Sans
-/// bulk") — équivalent mobile de la `.deplacer-bar` de
-/// `lst_achat_confirme.php` côté web.
-class _DeplacerFloatingBar extends StatelessWidget {
-  const _DeplacerFloatingBar({required this.visible, required this.count, required this.onDeplacer});
-  final bool visible;
+/// Barre "N sélectionné(s) / Déplacer sur un bulk" (vue "Sans bulk" avec
+/// sélection) — affichée en haut de la liste d'articles (pas en bas), comme
+/// `.aca-deplacer-header` côté web.
+class _DeplacerHeader extends StatelessWidget {
+  const _DeplacerHeader({required this.count, required this.onDeplacer});
   final int count;
   final VoidCallback onDeplacer;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      left: 16,
-      right: 16,
-      bottom: visible ? 16 : -120,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF141826), Color(0xFF0D1018)]),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderAccent),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 10))],
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF141826), Color(0xFF0D1018)]),
+        border: Border.all(color: AppColors.borderAccent),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_rounded, size: 16, color: AppColors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('$count sélectionné(s)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.check_circle_rounded, size: 16, color: AppColors.green),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('$count sélectionné(s)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
-              ),
-              ElevatedButton.icon(
-                onPressed: onDeplacer,
-                icon: const Icon(Icons.folder_open_rounded, size: 16),
-                label: const Text('Déplacer sur un bulk'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
-                ),
-              ),
-            ],
+          ElevatedButton.icon(
+            onPressed: onDeplacer,
+            icon: const Icon(Icons.folder_open_rounded, size: 16),
+            label: const Text('Déplacer sur un bulk'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
