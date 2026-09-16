@@ -23,6 +23,7 @@ class ProduitFilters {
     required this.modeles,
     required this.systemes,
     required this.lieux,
+    this.bulks = const [],
   });
 
   final List<LookupItem> familles;
@@ -36,6 +37,8 @@ class ProduitFilters {
   final List<LookupItem> modeles;
   final List<LookupItem> systemes;
   final List<LookupItem> lieux;
+  // Bulks (lots en gros) déjà utilisés, pour l'autocomplete du champ "Bulk".
+  final List<String> bulks;
 
   factory ProduitFilters.fromJson(Map<String, dynamic> json) {
     List<LookupItem> parse(String key, String idKey, String labelKey) {
@@ -58,6 +61,13 @@ class ProduitFilters {
       modeles: parse('models', 'id_model', 'nom_model'),
       systemes: parse('systemes', 'id_systeme', 'nom_systeme'),
       lieux: parse('lieux', 'id_lieu', 'nom_lieu'),
+      bulks: (json['bulks'] is List)
+          ? (json['bulks'] as List)
+              .whereType<Map>()
+              .map((e) => e['bulk']?.toString().trim() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const [],
     );
   }
 
@@ -72,5 +82,6 @@ class ProduitFilters {
         modeles: [],
         systemes: [],
         lieux: [],
+        bulks: [],
       );
 }

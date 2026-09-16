@@ -48,6 +48,13 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   UserModel? _user;
   Map<String, String> _imagesParDesignation = {};
 
+  // Onglet "Achat confirmé" : panneau "classeurs" par bulk (voir
+  // Produit/lst_achat_confirme côté web). '__tous__'/'__sans_bulk__' sont
+  // des repères spéciaux, sinon un nom de bulk existant.
+  String _bulkFiltreActif = '__sans_bulk__';
+  final Set<String> _selectedBulkIds = {};
+  bool get _canOrganizeBulk => _user?.role == 'patron' || _user?.role == 'gerant';
+
   @override
   void initState() {
     super.initState();
@@ -148,8 +155,65 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   }
 
   void _onVueChanged(ProduitVue vue) {
-    setState(() => _vue = vue);
+    setState(() {
+      _vue = vue;
+      _bulkFiltreActif = '__sans_bulk__';
+      _selectedBulkIds.clear();
+    });
     _reload();
+  }
+
+  void _onBulkFiltreChanged(String filtre) {
+    setState(() {
+      _bulkFiltreActif = filtre;
+      _selectedBulkIds.clear();
+    });
+  }
+
+  void _onBulkCheckChanged(String idProduits, bool checked) {
+    setState(() {
+      if (checked) {
+        _selectedBulkIds.add(idProduits);
+      } else {
+        _selectedBulkIds.remove(idProduits);
+      }
+    });
+  }
+
+  Future<void> _entrerToutStock(String bulk) async {
+    final ok = await _confirmDialog('Entrer tout ce lot en stock ?', 'Tous les articles du classeur "$bulk" deviendront vendables normalement.');
+    if (!ok || !mounted) return;
+    final result = await ProduitService.instance.entrerStockBulk(bulk: bulk);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
+  Future<void> _ouvrirModalDeplacer(List<String> bulkNames) async {
+    if (_selectedBulkIds.isEmpty) return;
+    final selectedProduits = _produits.where((p) => _selectedBulkIds.contains(p.idProduits)).toList();
+    final bulk = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _DeplacerBulkSheet(bulkNames: bulkNames, selectedProduits: selectedProduits),
+    );
+    if (bulk == null || bulk.trim().isEmpty || !mounted) return;
+    final result = await ProduitService.instance.assignerBulk(ids: _selectedBulkIds.toList(), bulk: bulk.trim());
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
+    );
+    if (result.success) {
+      setState(() => _selectedBulkIds.clear());
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
   }
 
   Future<void> _reload() async {
@@ -367,13 +431,42 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = ProduitGroup.groupBy(_produits);
+    final isAchatConfirmeVue = _vue == ProduitVue.achatConfirme;
+    final groups = isAchatConfirmeVue ? const <ProduitGroup>[] : ProduitGroup.groupBy(_produits);
     final valeurVente = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixUnitaire));
     final valeurAchat = _produits.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
     // Comptes hors patron/gérant/magasinier : n'affichent que prix de vente,
     // modèle, n° de série, IMEI et batterie sur les articles (le rôle n'est
     // pas encore chargé -> restriction par défaut, par sécurité).
     final restrictedInfo = !(_user?.hasFullArticleAccess ?? false);
+
+    // Panneau "classeurs" (onglet "Achat confirmé") : comptage par bulk,
+    // calculé côté client à partir de la liste déjà chargée (pas d'appel
+    // réseau supplémentaire par filtre, voir Produit/lst_achat_confirme
+    // côté web pour l'équivalent serveur).
+    final bulkCounts = <String, int>{};
+    var sansBulkCount = 0;
+    if (isAchatConfirmeVue) {
+      for (final p in _produits) {
+        final b = (p.bulk ?? '').trim();
+        if (b.isEmpty) {
+          sansBulkCount++;
+        } else {
+          bulkCounts[b] = (bulkCounts[b] ?? 0) + 1;
+        }
+      }
+    }
+    final bulkNames = bulkCounts.keys.toList()..sort();
+    List<ProduitModel> achatFiltres = const [];
+    if (isAchatConfirmeVue) {
+      if (_bulkFiltreActif == '__tous__') {
+        achatFiltres = _produits;
+      } else if (_bulkFiltreActif == '__sans_bulk__') {
+        achatFiltres = _produits.where((p) => (p.bulk ?? '').trim().isEmpty).toList();
+      } else {
+        achatFiltres = _produits.where((p) => (p.bulk ?? '').trim() == _bulkFiltreActif).toList();
+      }
+    }
 
     final cart = CartService.instance;
 
@@ -406,7 +499,9 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         ],
       ),
       body: SafeArea(
-        child: RefreshIndicator(
+        child: Stack(
+          children: [
+          RefreshIndicator(
           color: AppColors.accentLight,
           backgroundColor: AppColors.bgCard,
           onRefresh: _bootstrap,
@@ -457,7 +552,22 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   onSelectionChanged: _onSelectionChanged,
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 14)),
+              if (isAchatConfirmeVue) ...[
+                SliverToBoxAdapter(
+                  child: _BulkFiltreBar(
+                    filtreActif: _bulkFiltreActif,
+                    totalCount: _produits.length,
+                    sansBulkCount: sansBulkCount,
+                    bulkCounts: bulkCounts,
+                    bulkNames: bulkNames,
+                    canOrganize: _canOrganizeBulk,
+                    onChanged: _onBulkFiltreChanged,
+                    onEntrerToutStock: _entrerToutStock,
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 4)),
               if (_loading)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -468,6 +578,20 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   hasScrollBody: false,
                   child: _ErrorState(message: _error!, onRetry: _reload),
                 )
+              else if (isAchatConfirmeVue)
+                if (achatFiltres.isEmpty)
+                  const SliverFillRemaining(hasScrollBody: false, child: _EmptyState())
+                else
+                  SliverList.builder(
+                    itemCount: achatFiltres.length,
+                    itemBuilder: (context, i) => _AchatArticleRow(
+                      produit: achatFiltres[i],
+                      showCheckbox: _bulkFiltreActif == '__sans_bulk__',
+                      checked: _selectedBulkIds.contains(achatFiltres[i].idProduits),
+                      onCheckChanged: (v) => _onBulkCheckChanged(achatFiltres[i].idProduits, v),
+                      onEntrerEnStock: _entrerEnStockAchat,
+                    ),
+                  )
               else if (groups.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -497,9 +621,16 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onMettreEnAchat: _mettreEnAchatDepuisAttente,
                   ),
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 90)),
+              SliverToBoxAdapter(child: SizedBox(height: _selectedBulkIds.isNotEmpty ? 140 : 90)),
             ],
           ),
+          ),
+          _DeplacerFloatingBar(
+            visible: _selectedBulkIds.isNotEmpty,
+            count: _selectedBulkIds.length,
+            onDeplacer: () => _ouvrirModalDeplacer(bulkNames),
+          ),
+          ],
         ),
       ),
     );
@@ -591,6 +722,464 @@ class _ErrorState extends StatelessWidget {
           TextButton(onPressed: onRetry, child: const Text('Réessayer', style: TextStyle(color: AppColors.accentLight))),
         ],
       ),
+    );
+  }
+}
+
+/// Panneau "classeurs" de l'onglet "Achat confirmé" — équivalent mobile du
+/// panneau de gauche (1/4) de `Produit/lst_achat_confirme` côté web : une
+/// barre horizontale de chips (au lieu d'une colonne, écran étroit oblige)
+/// avec "Afficher tout", un chip par bulk (avec son compteur et, pour
+/// patron/gérant, un bouton "Entrer tout dans stock"), puis "Sans bulk"
+/// (sélectionné par défaut).
+class _BulkFiltreBar extends StatelessWidget {
+  const _BulkFiltreBar({
+    required this.filtreActif,
+    required this.totalCount,
+    required this.sansBulkCount,
+    required this.bulkCounts,
+    required this.bulkNames,
+    required this.canOrganize,
+    required this.onChanged,
+    required this.onEntrerToutStock,
+  });
+
+  final String filtreActif;
+  final int totalCount;
+  final int sansBulkCount;
+  final Map<String, int> bulkCounts;
+  final List<String> bulkNames;
+  final bool canOrganize;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onEntrerToutStock;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip({
+      required String key,
+      required String label,
+      required IconData icon,
+      required int count,
+      VoidCallback? onEntrerTout,
+    }) {
+      final selected = filtreActif == key;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => onChanged(key),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            constraints: const BoxConstraints(maxWidth: 220),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? const LinearGradient(colors: [AppColors.accent, AppColors.green])
+                  : null,
+              color: selected ? null : AppColors.bgElevated,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: selected ? Colors.transparent : AppColors.border),
+              boxShadow: selected ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 13, color: selected ? Colors.white : AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        label,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textPrimary),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: selected ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text('$count', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textSecondary)),
+                    ),
+                  ],
+                ),
+                if (onEntrerTout != null) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: onEntrerTout,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: selected ? Colors.white.withValues(alpha: 0.2) : AppColors.green.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Entrer tout dans stock',
+                        style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.green),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          chip(key: '__tous__', label: 'Afficher tout', icon: Icons.layers_rounded, count: totalCount),
+          for (final name in bulkNames)
+            chip(
+              key: name,
+              label: name,
+              icon: Icons.folder_rounded,
+              count: bulkCounts[name] ?? 0,
+              onEntrerTout: canOrganize ? () => onEntrerToutStock(name) : null,
+            ),
+          chip(key: '__sans_bulk__', label: 'Les articles sans bulk', icon: Icons.help_outline_rounded, count: sansBulkCount),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ligne détaillée d'un article (onglet "Achat confirmé") — équivalent
+/// mobile d'une `.aca-row` de `tabproduit_achat_confirme_articles.php` côté
+/// web : case à cocher (vue "Sans bulk" uniquement), désignation, n° série,
+/// badge bulk, prix, et bouton "Entrer en stock".
+class _AchatArticleRow extends StatelessWidget {
+  const _AchatArticleRow({
+    required this.produit,
+    required this.showCheckbox,
+    required this.checked,
+    required this.onCheckChanged,
+    this.onEntrerEnStock,
+  });
+
+  final ProduitModel produit;
+  final bool showCheckbox;
+  final bool checked;
+  final ValueChanged<bool> onCheckChanged;
+  final void Function(ProduitModel produit)? onEntrerEnStock;
+
+  String _fmt(double v) {
+    final s = v.round().toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bulk = (produit.bulk ?? '').trim();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF10131C), AppColors.bgElevated],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          if (showCheckbox) ...[
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: checked,
+                activeColor: AppColors.green,
+                onChanged: (v) => onCheckChanged(v ?? false),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  produit.designation,
+                  style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      produit.numSerie ?? 'Réf. ${produit.idProduits}',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: (bulk.isEmpty ? AppColors.textMuted : AppColors.green).withValues(alpha: 0.12),
+                        border: Border.all(color: (bulk.isEmpty ? AppColors.textMuted : AppColors.green).withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Text(
+                        bulk.isEmpty ? 'Sans bulk' : bulk,
+                        style: GoogleFonts.inter(fontSize: 9.5, fontWeight: FontWeight.w700, color: bulk.isEmpty ? AppColors.textSecondary : AppColors.green),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_fmt(produit.prixUnitaire)} Ar',
+            style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w800, color: AppColors.green),
+          ),
+          if (onEntrerEnStock != null) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              icon: const Icon(Icons.move_to_inbox_rounded, size: 19, color: AppColors.green),
+              tooltip: 'Entrer en stock',
+              onPressed: () => onEntrerEnStock!(produit),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Barre flottante "Déplacer sur un bulk" (sélection active en vue "Sans
+/// bulk") — équivalent mobile de la `.deplacer-bar` de
+/// `lst_achat_confirme.php` côté web.
+class _DeplacerFloatingBar extends StatelessWidget {
+  const _DeplacerFloatingBar({required this.visible, required this.count, required this.onDeplacer});
+  final bool visible;
+  final int count;
+  final VoidCallback onDeplacer;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      left: 16,
+      right: 16,
+      bottom: visible ? 16 : -120,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF141826), Color(0xFF0D1018)]),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.borderAccent),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 10))],
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle_rounded, size: 16, color: AppColors.green),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('$count sélectionné(s)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
+              ),
+              ElevatedButton.icon(
+                onPressed: onDeplacer,
+                icon: const Icon(Icons.folder_open_rounded, size: 16),
+                label: const Text('Déplacer sur un bulk'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet "Déplacer sur un bulk" : liste des articles sélectionnés,
+/// choix unique d'un bulk existant ou création d'un nouveau — équivalent
+/// mobile du modal de `lst_achat_confirme.php` côté web.
+class _DeplacerBulkSheet extends StatefulWidget {
+  const _DeplacerBulkSheet({required this.bulkNames, required this.selectedProduits});
+  final List<String> bulkNames;
+  final List<ProduitModel> selectedProduits;
+
+  @override
+  State<_DeplacerBulkSheet> createState() => _DeplacerBulkSheetState();
+}
+
+class _DeplacerBulkSheetState extends State<_DeplacerBulkSheet> {
+  late List<String> _choices;
+  String? _selected;
+  final _newBulkController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _choices = List.of(widget.bulkNames);
+  }
+
+  @override
+  void dispose() {
+    _newBulkController.dispose();
+    super.dispose();
+  }
+
+  void _ajouterNouveau() {
+    final nom = _newBulkController.text.trim();
+    if (nom.isEmpty) return;
+    setState(() {
+      if (!_choices.contains(nom)) _choices.insert(0, nom);
+      _selected = nom;
+      _newBulkController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.folder_open_rounded, size: 18, color: AppColors.accentLight),
+                        const SizedBox(width: 8),
+                        Text('Déplacer sur un bulk', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
+                      constraints: const BoxConstraints(maxHeight: 130),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: widget.selectedProduits
+                            .map((p) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 2),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(child: Text(p.designation, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary))),
+                                      Text(p.numSerie ?? '', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                                    ],
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _newBulkController,
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13.5),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: 'Créer un nouveau bulk...',
+                              hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: AppColors.border)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: AppColors.border)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: AppColors.borderAccent)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _ajouterNouveau,
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9))),
+                          child: const Text('Ajouter'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (_choices.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text('Aucun bulk existant — créez-en un ci-dessus.', style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textMuted)),
+                      )
+                    else
+                      ..._choices.map((b) => RadioListTile<String>(
+                            value: b,
+                            groupValue: _selected,
+                            onChanged: (v) => setState(() => _selected = v),
+                            activeColor: AppColors.green,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(b, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13.5)),
+                          )),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.textSecondary, side: const BorderSide(color: AppColors.border), padding: const EdgeInsets.symmetric(vertical: 13)),
+                            child: const Text('Annuler'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _selected == null ? null : () => Navigator.of(context).pop(_selected),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.green,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Valider', style: TextStyle(fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

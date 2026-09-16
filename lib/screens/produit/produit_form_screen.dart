@@ -208,10 +208,6 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
       setState(() => _error = "La désignation est obligatoire.");
       return;
     }
-    if (achatAction != null && _bulk.text.trim().isEmpty) {
-      setState(() => _error = 'Le champ Bulk est obligatoire.');
-      return;
-    }
     setState(() {
       _submitting = true;
       _error = null;
@@ -390,9 +386,10 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
             ],
             if (widget.existing?.isAchat ?? false) ...[
               const SizedBox(height: 20),
-              InlineField(
-                label: 'Bulk',
+              AutocompleteLookupField(
+                label: 'Bulk (facultatif)',
                 controller: _bulk,
+                suggestions: widget.filters.bulks,
                 prefixIcon: Icons.inventory_2_rounded,
               ),
             ],
@@ -484,7 +481,12 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
               ),
               if (_achatMode) ...[
                 const SizedBox(height: 12),
-                InlineField(label: 'Bulk *', controller: _bulk, prefixIcon: Icons.inventory_2_rounded),
+                AutocompleteLookupField(
+                  label: 'Bulk (facultatif)',
+                  controller: _bulk,
+                  suggestions: widget.filters.bulks,
+                  prefixIcon: Icons.inventory_2_rounded,
+                ),
               ],
             ],
 

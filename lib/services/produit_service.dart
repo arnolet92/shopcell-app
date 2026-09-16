@@ -242,6 +242,28 @@ class ProduitService {
     return SaveProduitResult(success: !error, message: data['msg']?.toString());
   }
 
+  /// Panneau "classeurs" (onglet "Achat confirmé"), patron/gérant
+  /// uniquement : bouton "Entrer tout dans stock" sur un classeur —
+  /// équivalent de `Produit::entrer_stock_bulk()`.
+  Future<SaveProduitResult> entrerStockBulk({required String bulk}) async {
+    final data = await ApiClient.instance.post('entrer_stock_bulk', fields: {'bulk': bulk});
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
+  /// Sélection multiple (vue "Sans bulk"), patron/gérant uniquement :
+  /// "Déplacer sur un bulk" — équivalent de `Produit::assigner_bulk()`.
+  Future<SaveProduitResult> assignerBulk({required List<String> ids, required String bulk}) async {
+    final data = await ApiClient.instance.post('assigner_bulk', fields: {
+      'ids': ids.join(','),
+      'bulk': bulk,
+    });
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
   /// Onglet "Achat en attente" (patron uniquement) — équivalent de
   /// `Produit::confirmer_achat()`.
   Future<SaveProduitResult> confirmerAchat({required String idProduits}) async {
