@@ -100,7 +100,9 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
     _fournisseur = TextEditingController(text: p?.nomFrns ?? '');
     _systeme = TextEditingController(text: p?.nomSysteme ?? '');
     _motifReparation = TextEditingController(text: p?.motifReparationProduits ?? '');
-    _bulk = TextEditingController();
+    // Pré-rempli seulement en modification d'un article déjà "en achat" ;
+    // vide sinon (saisi via le switch "Mettre en achat" à la création).
+    _bulk = TextEditingController(text: (p?.isAchat ?? false) ? (p?.bulk ?? '') : '');
     if (p?.nomLieu != null) {
       _lieuLabel = p!.nomLieu;
       final match = widget.filters.lieux.where((l) => l.label == p.nomLieu);
@@ -247,7 +249,9 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
       motifReparation: (widget.existing?.isReparationProduits ?? false) ? _motifReparation.text.trim() : null,
       idLieu: _lieuId,
       photoPath: _photoPath,
-      bulk: achatAction != null ? _bulk.text.trim() : null,
+      // Envoyé soit à la création (switch "Mettre en achat"), soit en
+      // modification d'un article déjà "en achat" (champ visible ci-dessus).
+      bulk: (achatAction != null || (widget.existing?.isAchat ?? false)) ? _bulk.text.trim() : null,
       achatAction: achatAction,
     );
 
@@ -382,6 +386,14 @@ class _ProduitFormScreenState extends State<ProduitFormScreen> {
                 label: 'Motif de réparation',
                 controller: _motifReparation,
                 prefixIcon: Icons.build_rounded,
+              ),
+            ],
+            if (widget.existing?.isAchat ?? false) ...[
+              const SizedBox(height: 20),
+              InlineField(
+                label: 'Bulk',
+                controller: _bulk,
+                prefixIcon: Icons.inventory_2_rounded,
               ),
             ],
             const SizedBox(height: 20),
