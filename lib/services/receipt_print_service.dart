@@ -40,6 +40,14 @@ class ReceiptPrintService {
     bool isCopie = false,
     /// Ticket d'un échange : filigrane "Échange" sur le PDF A4.
     bool isEchange = false,
+    /// Devis non fiscal (bouton "Proforma" de l'encaissement vente/échange) :
+    /// même contenu, filigrane "PROFORMA" (PDF A4) ou mention "PROFORMA"
+    /// (ticket thermique) à la place du filigrane normal.
+    bool isProforma = false,
+    /// Échange uniquement : l'article repris au client (retourné en stock),
+    /// affiché à part en bas du PDF A4 — la ligne principale (`lines`)
+    /// montre l'article remis au client (sortie du stock).
+    ReceiptLine? articleRetourne,
   }) async {
     final ticketCfg = await PrinterService.instance.config;
     final hasTicket = ticketCfg?.isConfigured ?? false;
@@ -74,6 +82,7 @@ class ReceiptPrintService {
         paiements: paiements,
         numeroFacture: numeroFacture,
         dateFacture: dateFacture,
+        isProforma: isProforma,
       );
     }
 
@@ -89,6 +98,8 @@ class ReceiptPrintService {
         clientCin: clientCin,
         isCopie: isCopie,
         isEchange: isEchange,
+        isProforma: isProforma,
+        articleRetourne: articleRetourne,
       );
       if (choice == 'a4_share') {
         final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${numeroFacture ?? ''}.pdf');
@@ -111,6 +122,7 @@ class ReceiptPrintService {
     List<PaymentSplit>? paiements,
     String? numeroFacture,
     String? dateFacture,
+    bool isProforma = false,
   }) async {
     try {
       final shopInfo = await VenteService.instance.loadShopInfo();
@@ -132,6 +144,7 @@ class ReceiptPrintService {
         clientTelephone: clientTelephone,
         numeroFacture: numeroFacture,
         dateFacture: dateFacture,
+        isProforma: isProforma,
       );
       final result = await PrinterService.instance.printBytes(bytes);
       return result.success ? '(Ticket imprimé.)' : '(Impression échouée : ${result.message ?? 'imprimante non configurée'})';
@@ -151,6 +164,8 @@ class ReceiptPrintService {
     String? clientCin,
     bool isCopie = false,
     bool isEchange = false,
+    bool isProforma = false,
+    ReceiptLine? articleRetourne,
   }) async {
     final shopInfo = await VenteService.instance.loadShopInfo();
     final baseUrl = await ApiClient.instance.baseUrl;
@@ -179,6 +194,8 @@ class ReceiptPrintService {
       clientCin: clientCin,
       isCopie: isCopie,
       isEchange: isEchange,
+      isProforma: isProforma,
+      articleRetourne: articleRetourne,
     );
   }
 }

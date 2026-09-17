@@ -108,21 +108,33 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
     double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
     final newPrixUnitaire = d(j['new_prix_unitaire']);
     final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : newPrixUnitaire;
-    // La description montre l'article ÉCHANGÉ (retourné en stock), pas le
-    // nouvel article remis au client.
+    // La description montre l'article REMIS au client (sortie du stock) —
+    // l'article REPRIS (retourné en stock) est affiché à part, sous
+    // "Article retourné", via `articleRetourne`.
     final lines = [
       ReceiptLine(
-        designation: s(j['old_designation']) ?? 'Article',
+        designation: s(j['new_designation']) ?? item.newDesignation,
         qte: 1,
         prixUnitaire: prixUnitaireTicket,
         total: prixUnitaireTicket,
-        numSerie: s(j['old_num_serie']),
-        imei1: s(j['old_imei1']),
-        imei2: s(j['old_imei2']),
-        nomModel: s(j['old_nom_model']),
-        nomMarque: s(j['old_nom_marque']),
+        numSerie: s(j['new_num_serie']),
+        imei1: s(j['new_imei1']),
+        imei2: s(j['new_imei2']),
+        nomModel: s(j['new_nom_model']),
+        nomMarque: s(j['new_nom_marque']),
       ),
     ];
+    final articleRetourne = ReceiptLine(
+      designation: s(j['old_designation']) ?? item.oldDesignation,
+      qte: 1,
+      prixUnitaire: 0,
+      total: 0,
+      numSerie: s(j['old_num_serie']),
+      imei1: s(j['old_imei1']),
+      imei2: s(j['old_imei2']),
+      nomModel: s(j['old_nom_model']),
+      nomMarque: s(j['old_nom_marque']),
+    );
 
     final clientInfo = await showClientInfoDialog(
       context,
@@ -145,6 +157,7 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
       numeroFacture: item.numeroFacture,
       dateFacture: item.dateRaw,
       isEchange: true,
+      articleRetourne: articleRetourne,
     );
     if (!mounted) return;
     setState(() => _printingId = null);

@@ -28,6 +28,9 @@ class TicketBuilder {
     String? clientTelephone,
     String? numeroFacture,
     String? dateFacture,
+    /// Devis non fiscal (bouton "Proforma") : bandeau "*** PROFORMA ***" en
+    /// tête de ticket — pas de filigrane possible en ESC/POS brut.
+    bool isProforma = false,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm58, profile);
@@ -37,6 +40,9 @@ class TicketBuilder {
             '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final bytes = <int>[];
 
+    if (isProforma) {
+      bytes.addAll(generator.text('*** PROFORMA ***', styles: const PosStyles(align: PosAlign.center, bold: true)));
+    }
     bytes.addAll(generator.text(
       shopName,
       styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2),

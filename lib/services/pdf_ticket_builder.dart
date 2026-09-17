@@ -70,6 +70,14 @@ class PdfTicketBuilder {
     /// Ticket d'un échange : filigrane incliné "Échange" (bas-gauche vers
     /// haut-droite) en premier plan transparent.
     bool isEchange = false,
+    /// Devis non fiscal : filigrane "PROFORMA" à la place d'"Échange" (ou
+    /// seul, pour une vente) — même document, juste le filigrane qui change.
+    bool isProforma = false,
+    /// Échange uniquement : l'article REPRIS au client (retourné en stock),
+    /// affiché à part en bas de page — la ligne principale du tableau
+    /// (`lines`) montre l'article remis au client (sortie du stock), pas
+    /// celui-ci.
+    ReceiptLine? articleRetourne,
   }) async {
     final doc = pw.Document();
 
@@ -115,10 +123,13 @@ class PdfTicketBuilder {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
           theme: theme,
-          buildForeground: (isCopie || isEchange)
+          buildForeground: (isCopie || isEchange || isProforma)
               ? (context) => pw.Stack(
                     children: [
-                      if (isEchange) pw.Positioned.fill(child: _echangeWatermark()),
+                      if (isProforma)
+                        pw.Positioned.fill(child: _proformaWatermark())
+                      else if (isEchange)
+                        pw.Positioned.fill(child: _echangeWatermark()),
                       if (isCopie) pw.Positioned.fill(child: _copieWatermark()),
                     ],
                   )
@@ -147,6 +158,10 @@ class PdfTicketBuilder {
           ),
           pw.SizedBox(height: 10),
           _articlesTable(lines: lines, total: total),
+          if (articleRetourne != null) ...[
+            pw.SizedBox(height: 10),
+            _articleRetourneSection(articleRetourne),
+          ],
           pw.SizedBox(height: 10),
           _garantieEtSignature(),
         ],
@@ -187,6 +202,53 @@ class PdfTicketBuilder {
             style: pw.TextStyle(fontSize: 90, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey600, letterSpacing: 6),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Filigrane incliné "PROFORMA" — même orientation qu'"Échange", pour un
+  /// devis non fiscal (vente ou échange), à la place du filigrane normal.
+  static pw.Widget _proformaWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: 0.6,
+        child: pw.Opacity(
+          opacity: 0.18,
+          child: pw.Text(
+            'PROFORMA',
+            style: pw.TextStyle(fontSize: 80, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey600, letterSpacing: 6),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Encadré "Article retourné" (échange uniquement) — affiche l'article
+  /// repris au client (retourné en stock) séparément de la ligne principale
+  /// du tableau, qui montre l'article remis (sortie du stock).
+  static pw.Widget _articleRetourneSection(ReceiptLine article) {
+    final details = <String>[];
+    if ((article.numSerie ?? '').trim().isNotEmpty) details.add('N° série: ${article.numSerie}');
+    if ((article.imei1 ?? '').trim().isNotEmpty) details.add('IMEI1: ${article.imei1}');
+    if ((article.imei2 ?? '').trim().isNotEmpty) details.add('IMEI2: ${article.imei2}');
+    if ((article.nomModel ?? '').trim().isNotEmpty) details.add('Modèle: ${article.nomModel}');
+    if ((article.nomMarque ?? '').trim().isNotEmpty) details.add('Capacité: ${article.nomMarque}');
+
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.6, color: PdfColors.grey600), borderRadius: pw.BorderRadius.circular(3)),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text('Article retourné :', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5)),
+          pw.SizedBox(height: 3),
+          pw.Text(article.designation, style: const pw.TextStyle(fontSize: 9)),
+          if (details.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(details.join(' · '), style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+          ],
+        ],
       ),
     );
   }

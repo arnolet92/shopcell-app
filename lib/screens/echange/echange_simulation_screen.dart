@@ -15,12 +15,13 @@ String _fmt(double v) {
 }
 
 /// Simple calculateur de prix, sans article ni enregistrement : juste les 3
-/// champs "prix de l'article échangé (retourné)" / "prix actuel" (l'article
-/// en échange, sortie du stock) / "prix ajouté" (même formule que l'échange
-/// réel), miroir de l'onglet "Simulation d'échange" côté web
-/// (`Echange/index`). "Prix actuel" désigne toujours, comme partout ailleurs
-/// dans l'échange, le prix de l'article qui sort du stock — pas celui qui y
-/// retourne.
+/// champs "prix actuel" (valeur de reprise de l'article retourné) / "prix de
+/// vente" (l'article en échange, sortie du stock) / "prix ajouté" (même
+/// formule que l'échange réel), miroir de l'onglet "Simulation d'échange"
+/// côté web (`Echange/index`). "Prix actuel" désigne toujours, comme partout
+/// ailleurs dans l'échange (voir EchangeManagement::recapUlterieur()'s
+/// `$prix_actuel_repris`), le prix de l'article RETOURNÉ en stock — pas
+/// celui qui en sort.
 class EchangeSimulationScreen extends StatefulWidget {
   const EchangeSimulationScreen({super.key});
 
@@ -71,7 +72,7 @@ class _EchangeSimulationScreenState extends State<EchangeSimulationScreen> {
               ),
               const SizedBox(height: 18),
               InlineField(
-                label: "Prix de l'article échangé (retourné en stock)",
+                label: 'Prix actuel (article retourné en stock)',
                 controller: _prixRetourneCtrl,
                 prefixIcon: Icons.inventory_2_rounded,
                 keyboardType: TextInputType.number,
@@ -79,7 +80,7 @@ class _EchangeSimulationScreenState extends State<EchangeSimulationScreen> {
               ),
               const SizedBox(height: 14),
               InlineField(
-                label: 'Prix actuel (article en échange, sortie du stock)',
+                label: 'Prix de vente (article en échange, sortie du stock)',
                 controller: _prixActuelCtrl,
                 prefixIcon: Icons.sell_rounded,
                 keyboardType: TextInputType.number,

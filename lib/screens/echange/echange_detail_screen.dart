@@ -67,6 +67,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   final List<PaymentSplit> _splits = [];
 
   bool _submitting = false;
+  bool _proformaSubmitting = false;
   String? _error;
 
   @override
@@ -142,14 +143,14 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _selectedProduit = p;
       _produitResults = [];
       _produitSearchCtrl.clear();
-      // "Prix actuel" est automatique (prix catalogue de l'article choisi)
+      // "Prix de vente" est automatique (prix catalogue de l'article choisi)
       // mais modifiable ensuite.
       _prixVenteCtrl.text = p.prixUnitaire.toStringAsFixed(0);
     });
     await _refreshRecap();
   }
 
-  /// Appelé à chaque frappe dans le champ "Prix actuel" : on ne relance le
+  /// Appelé à chaque frappe dans le champ "Prix de vente" : on ne relance le
   /// calcul serveur qu'après une courte pause (sinon un appel réseau par
   /// caractère, réponses dans le désordre, et le champ qui "saute"). On ne
   /// réécrit jamais la valeur saisie dans le contrôleur (ça déplaçait le
@@ -256,10 +257,11 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       AppDataCache.instance.invalidate(CacheDomain.produits);
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
-      // La description imprimée montre l'article ÉCHANGÉ (celui qui retourne
-      // en stock, repris au client), pas le nouvel article remis. P.U = prix
-      // ajouté, sauf si prix ajouté = 0 ("Non upgrade" ou repris à sa pleine
-      // valeur) : dans ce cas P.U = prix actuel (le prix de l'article remis).
+      // La description imprimée montre l'article REMIS au client (sortie du
+      // stock) — l'article REPRIS (retourné en stock) est affiché à part,
+      // sous "Article retourné", via `articleRetourne`. P.U = prix ajouté,
+      // sauf si prix ajouté = 0 ("Non upgrade" ou repris à sa pleine valeur) :
+      // dans ce cas P.U = prix de vente (le prix de l'article remis).
       final entete = _entete;
       final ligneRepris = _ligneRepris;
       String? s(dynamic v) {
@@ -270,17 +272,28 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
       final lines = [
         ReceiptLine(
-          designation: s(ligneRepris?['designation_produits']) ?? rec.oldDesignation ?? 'Article',
+          designation: produit.designation,
           qte: 1,
           prixUnitaire: prixUnitaireTicket,
           total: prixUnitaireTicket,
-          numSerie: s(ligneRepris?['num_serie']),
-          imei1: s(ligneRepris?['imei1']),
-          imei2: s(ligneRepris?['imei2']),
-          nomModel: s(ligneRepris?['nom_model']),
-          nomMarque: s(ligneRepris?['nom_marque']),
+          numSerie: produit.numSerie,
+          imei1: produit.imei1,
+          imei2: produit.imei2,
+          nomModel: produit.nomModel,
+          nomMarque: produit.nomMarque,
         ),
       ];
+      final articleRetourne = ReceiptLine(
+        designation: s(ligneRepris?['designation_produits']) ?? rec.oldDesignation ?? 'Article',
+        qte: 1,
+        prixUnitaire: 0,
+        total: 0,
+        numSerie: s(ligneRepris?['num_serie']),
+        imei1: s(ligneRepris?['imei1']),
+        imei2: s(ligneRepris?['imei2']),
+        nomModel: s(ligneRepris?['nom_model']),
+        nomMarque: s(ligneRepris?['nom_marque']),
+      );
 
       // Avant l'impression A4, on propose de saisir/corriger les
       // coordonnées client à afficher — facultatif, pré-rempli avec ce
@@ -305,6 +318,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         clientCin: clientInfo?.cin,
         numeroFacture: entete?['numero_facture']?.toString(),
         isEchange: true,
+        articleRetourne: articleRetourne,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -316,6 +330,81 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         _submitting = false;
         _error = result.message;
       });
+    }
+  }
+
+  /// Devis non fiscal : imprime/partage le même contenu que le ticket
+  /// d'échange, filigrane "PROFORMA" à la place — sans valider l'échange (le
+  /// stock n'est pas mouvementé, rien n'est enregistré côté serveur).
+  Future<void> _imprimerProforma() async {
+    final produit = _selectedProduit;
+    final rec = _recap;
+    if (produit == null || rec == null || rec.error) {
+      setState(() => _error = 'Choisissez un article de remplacement.');
+      return;
+    }
+    setState(() => _proformaSubmitting = true);
+
+    final entete = _entete;
+    final ligneRepris = _ligneRepris;
+    String? s(dynamic v) {
+      final t = v?.toString().trim();
+      return (t == null || t.isEmpty) ? null : t;
+    }
+
+    final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
+    final lines = [
+      ReceiptLine(
+        designation: produit.designation,
+        qte: 1,
+        prixUnitaire: prixUnitaireTicket,
+        total: prixUnitaireTicket,
+        numSerie: produit.numSerie,
+        imei1: produit.imei1,
+        imei2: produit.imei2,
+        nomModel: produit.nomModel,
+        nomMarque: produit.nomMarque,
+      ),
+    ];
+    final articleRetourne = ReceiptLine(
+      designation: s(ligneRepris?['designation_produits']) ?? rec.oldDesignation ?? 'Article',
+      qte: 1,
+      prixUnitaire: 0,
+      total: 0,
+      numSerie: s(ligneRepris?['num_serie']),
+      imei1: s(ligneRepris?['imei1']),
+      imei2: s(ligneRepris?['imei2']),
+      nomModel: s(ligneRepris?['nom_model']),
+      nomMarque: s(ligneRepris?['nom_marque']),
+    );
+
+    final clientInfo = await showClientInfoDialog(
+      context,
+      initialNom: entete?['nom_complet']?.toString(),
+      initialPrenom: entete?['prenom_personnes']?.toString(),
+      initialTelephone: entete?['telephone']?.toString(),
+      initialCin: entete?['cin_personnes']?.toString(),
+    );
+    if (!mounted) return;
+
+    final printMessage = await ReceiptPrintService.instance.offerPrint(
+      context,
+      lines: lines,
+      total: prixUnitaireTicket,
+      cashierName: widget.user.nomComplet,
+      clientName: clientInfo?.nom,
+      clientPrenom: clientInfo?.prenom,
+      clientTelephone: clientInfo?.telephone,
+      clientCin: clientInfo?.cin,
+      numeroFacture: entete?['numero_facture']?.toString(),
+      isEchange: true,
+      isProforma: true,
+      articleRetourne: articleRetourne,
+    );
+    if (!mounted) return;
+    setState(() => _proformaSubmitting = false);
+    if (printMessage.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(printMessage)));
     }
   }
 
@@ -376,7 +465,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                           // On garde le récapitulatif affiché pendant le
                           // recalcul (petit spinner) plutôt que de le
                           // remplacer par un gros indicateur — évite le
-                          // clignotement à chaque frappe dans "Prix actuel".
+                          // clignotement à chaque frappe dans "Prix de vente".
                           if (_recap != null && !_recap!.error)
                             Opacity(opacity: _recapLoading ? 0.5 : 1, child: _recapCard(_recap!))
                           else if (_recapLoading)
@@ -392,7 +481,23 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                             const SizedBox(height: 14),
                             Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
                           ],
-                          const SizedBox(height: 22),
+                          const SizedBox(height: 18),
+                          OutlinedButton.icon(
+                            onPressed: (_recap != null && !_recap!.error && !_proformaSubmitting) ? _imprimerProforma : null,
+                            icon: _proformaSubmitting
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textSecondary))
+                                : const Icon(Icons.description_outlined, size: 17),
+                            label: const Text('Proforma'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.textPrimary,
+                              side: const BorderSide(color: AppColors.border),
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              minimumSize: const Size(double.infinity, 0),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
                           GradientButton(
                             label: "Valider l'échange",
                             icon: Icons.swap_horizontal_circle_rounded,
@@ -552,7 +657,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InlineField(
-          label: 'Prix actuel (Ar)',
+          label: 'Prix de vente (article en échange) (Ar)',
           controller: _prixVenteCtrl,
           prefixIcon: Icons.sell_rounded,
           keyboardType: TextInputType.number,

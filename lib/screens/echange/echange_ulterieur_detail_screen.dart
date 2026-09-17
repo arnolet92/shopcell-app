@@ -56,6 +56,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
   bool _recapLoading = false;
 
   bool _submitting = false;
+  bool _proformaSubmitting = false;
   String? _error;
 
   @override
@@ -163,19 +164,31 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
 
-      // La description montre l'article ÉCHANGÉ (repris, "retourné" en
-      // stock sous forme de nouvelle fiche produit) — ici juste sa
-      // désignation saisie, il n'a pas d'autre détail (N° série, IMEI...)
-      // puisqu'il n'existait pas encore dans le logiciel.
+      // La description montre l'article REMIS au client (sortie du stock).
+      // L'article REPRIS (retourné) est affiché à part sous "Article
+      // retourné" — ici juste sa désignation saisie, il n'a pas d'autre
+      // détail (N° série, IMEI...) puisqu'il n'existait pas encore dans le
+      // logiciel.
       final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
       final lines = [
         ReceiptLine(
-          designation: widget.designation,
+          designation: produit.designation,
           qte: 1,
           prixUnitaire: prixUnitaireTicket,
           total: prixUnitaireTicket,
+          numSerie: produit.numSerie,
+          imei1: produit.imei1,
+          imei2: produit.imei2,
+          nomModel: produit.nomModel,
+          nomMarque: produit.nomMarque,
         ),
       ];
+      final articleRetourne = ReceiptLine(
+        designation: widget.designation,
+        qte: 1,
+        prixUnitaire: 0,
+        total: 0,
+      );
 
       final clientInfo = await showClientInfoDialog(context);
       if (!mounted) return;
@@ -190,6 +203,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
         clientTelephone: clientInfo?.telephone,
         clientCin: clientInfo?.cin,
         isEchange: true,
+        articleRetourne: articleRetourne,
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -201,6 +215,63 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
         _submitting = false;
         _error = result.message;
       });
+    }
+  }
+
+  /// Devis non fiscal : imprime/partage le même contenu que le ticket
+  /// d'échange, filigrane "PROFORMA" à la place — sans valider l'échange
+  /// (rien n'est enregistré côté serveur, `validerUlterieur` n'est pas
+  /// appelé).
+  Future<void> _imprimerProforma() async {
+    final produit = _selectedProduit;
+    final rec = _recap;
+    if (produit == null || rec == null || rec.error) {
+      setState(() => _error = 'Choisissez un article de remplacement.');
+      return;
+    }
+    setState(() => _proformaSubmitting = true);
+
+    final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
+    final lines = [
+      ReceiptLine(
+        designation: produit.designation,
+        qte: 1,
+        prixUnitaire: prixUnitaireTicket,
+        total: prixUnitaireTicket,
+        numSerie: produit.numSerie,
+        imei1: produit.imei1,
+        imei2: produit.imei2,
+        nomModel: produit.nomModel,
+        nomMarque: produit.nomMarque,
+      ),
+    ];
+    final articleRetourne = ReceiptLine(
+      designation: widget.designation,
+      qte: 1,
+      prixUnitaire: 0,
+      total: 0,
+    );
+
+    final clientInfo = await showClientInfoDialog(context);
+    if (!mounted) return;
+
+    final printMessage = await ReceiptPrintService.instance.offerPrint(
+      context,
+      lines: lines,
+      total: prixUnitaireTicket,
+      cashierName: widget.user.nomComplet,
+      clientName: clientInfo?.nom,
+      clientPrenom: clientInfo?.prenom,
+      clientTelephone: clientInfo?.telephone,
+      clientCin: clientInfo?.cin,
+      isEchange: true,
+      isProforma: true,
+      articleRetourne: articleRetourne,
+    );
+    if (!mounted) return;
+    setState(() => _proformaSubmitting = false);
+    if (printMessage.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(printMessage)));
     }
   }
 
@@ -234,7 +305,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
               ),
               const SizedBox(height: 14),
               InlineField(
-                label: "Prix de l'article échangé, retourné en stock (Ar)",
+                label: 'Prix actuel (valeur de reprise, article retourné en stock) (Ar)',
                 controller: _prixActuelReprisCtrl,
                 prefixIcon: Icons.price_change_rounded,
                 keyboardType: TextInputType.number,
@@ -286,6 +357,22 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
                   Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
                 ],
                 const SizedBox(height: 22),
+                OutlinedButton.icon(
+                  onPressed: (_recap != null && !_recap!.error && !_proformaSubmitting) ? _imprimerProforma : null,
+                  icon: _proformaSubmitting
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textSecondary))
+                      : const Icon(Icons.description_outlined, size: 17),
+                  label: const Text('Proforma'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    minimumSize: const Size(double.infinity, 0),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 GradientButton(
                   label: "Valider l'échange",
                   icon: Icons.swap_horizontal_circle_rounded,
@@ -381,7 +468,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InlineField(
-          label: 'Prix actuel (Ar)',
+          label: 'Prix de vente (article en échange) (Ar)',
           controller: _prixVenteCtrl,
           prefixIcon: Icons.sell_rounded,
           keyboardType: TextInputType.number,

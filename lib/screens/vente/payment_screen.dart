@@ -50,6 +50,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   bool _loadingRefs = true;
   bool _submitting = false;
+  bool _proformaSubmitting = false;
   String? _error;
 
   double get _total => CartService.instance.total;
@@ -267,6 +268,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Devis non fiscal : imprime/partage le même contenu que la facture,
+  /// filigrane "PROFORMA" à la place — sans encaisser la vente (le panier
+  /// n'est pas vidé, rien n'est enregistré côté serveur).
+  Future<void> _imprimerProforma() async {
+    setState(() => _proformaSubmitting = true);
+    final lines = CartService.instance.lines
+        .map((l) => ReceiptLine(
+              designation: l.produit.designation,
+              qte: l.qte.toDouble(),
+              prixUnitaire: l.prixVente,
+              total: l.total,
+              numSerie: l.produit.numSerie,
+              imei1: l.produit.imei1,
+              imei2: l.produit.imei2,
+              nomModel: l.produit.nomModel,
+              nomMarque: l.produit.nomMarque,
+              nomTypePiece: l.produit.nomTypePiece,
+              nomSousCategoriePiece: l.produit.nomSousCategoriePiece,
+            ))
+        .toList();
+    final printMessage = await ReceiptPrintService.instance.offerPrint(
+      context,
+      lines: lines,
+      total: _total,
+      cashierName: widget.user.nomComplet,
+      clientName: _selectedClient?.nomComplet,
+      clientPrenom: _selectedClient?.prenom,
+      clientTelephone: _selectedClient?.telephone,
+      clientCin: _selectedClient?.cin,
+      isProforma: true,
+    );
+    if (!mounted) return;
+    setState(() => _proformaSubmitting = false);
+    if (printMessage.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(printMessage)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sum = _splits.isNotEmpty ? _splitsSum : (double.tryParse(_montantCtrl.text.replaceAll(' ', '')) ?? 0);
@@ -465,7 +504,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: _proformaSubmitting ? null : _imprimerProforma,
+                icon: _proformaSubmitting
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textSecondary))
+                    : const Icon(Icons.description_outlined, size: 17),
+                label: const Text('Proforma'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  minimumSize: const Size(double.infinity, 0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 10),
               GradientButton(
                 label: 'Valider',
                 icon: Icons.check_circle_rounded,
