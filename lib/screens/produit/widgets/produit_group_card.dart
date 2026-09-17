@@ -48,6 +48,7 @@ class ProduitGroupCard extends StatefulWidget {
     this.selectionMode = false,
     this.selectedIds = const {},
     this.onCheckChanged,
+    this.startExpanded = false,
   });
 
   final ProduitGroup group;
@@ -87,18 +88,24 @@ class ProduitGroupCard extends StatefulWidget {
   final void Function(ProduitModel produit)? onEntrerEnStockAchat;
   final void Function(ProduitModel produit)? onConfirmerAchat;
   final void Function(ProduitModel produit)? onMettreEnAchat;
-  /// Sélection multiple (onglet "Achat confirmé", vue "Sans bulk") : affiche
-  /// une case à cocher sur chaque unité "en achat confirmé".
+  /// Sélection multiple (onglet "Achat confirmé") : affiche une case à
+  /// cocher sur chaque unité "en achat confirmé", sur toutes les vues
+  /// (tous/sans bulk/un classeur nommé), pour pouvoir réorganiser un article
+  /// déjà rangé vers un autre bulk.
   final bool selectionMode;
   final Set<String> selectedIds;
   final void Function(String idProduits, bool checked)? onCheckChanged;
+  /// Groupe déjà déplié à l'ouverture (onglet "Achat confirmé" : le détail
+  /// doit être visible par défaut pour que les cases à cocher soient
+  /// immédiatement accessibles, sans devoir déplier chaque groupe).
+  final bool startExpanded;
 
   @override
   State<ProduitGroupCard> createState() => _ProduitGroupCardState();
 }
 
 class _ProduitGroupCardState extends State<ProduitGroupCard> {
-  bool _expanded = false;
+  late bool _expanded = widget.startExpanded;
 
   String _fmt(double v) {
     final s = v.round().toString();
@@ -383,13 +390,19 @@ class _UnitRow extends StatelessWidget {
             Row(
               children: [
                 if (selectionMode && produit.isAchat && !produit.achatAttente) ...[
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: Checkbox(
-                      value: checked,
-                      activeColor: AppColors.green,
-                      onChanged: onCheckChanged == null ? null : (v) => onCheckChanged!(v ?? false),
+                  // GestureDetector "vide" : absorbe le tap pour qu'il ne se
+                  // propage pas à l'InkWell parent (qui ouvrirait la fiche
+                  // détaillée au lieu de simplement cocher la case).
+                  GestureDetector(
+                    onTap: () {},
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Checkbox(
+                        value: checked,
+                        activeColor: AppColors.green,
+                        onChanged: onCheckChanged == null ? null : (v) => onCheckChanged!(v ?? false),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),

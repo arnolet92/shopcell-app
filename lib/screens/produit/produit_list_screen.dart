@@ -194,6 +194,58 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     }
   }
 
+  void _toggleSelectAllBulk(List<ProduitModel> visibles) {
+    final allSelected = visibles.isNotEmpty && visibles.every((p) => _selectedBulkIds.contains(p.idProduits));
+    setState(() {
+      if (allSelected) {
+        for (final p in visibles) {
+          _selectedBulkIds.remove(p.idProduits);
+        }
+      } else {
+        for (final p in visibles) {
+          _selectedBulkIds.add(p.idProduits);
+        }
+      }
+    });
+  }
+
+  Future<void> _renommerBulk(String ancien) async {
+    final controller = TextEditingController(text: ancien);
+    final nouveau = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Renommer le classeur', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
+            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.borderAccent)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Renommer', style: TextStyle(color: AppColors.accentLight, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (nouveau == null || nouveau.isEmpty || nouveau == ancien || !mounted) return;
+    final result = await ProduitService.instance.renommerBulk(ancien: ancien, nouveau: nouveau);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Classeur renommé.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
   Future<void> _ouvrirModalDeplacer(List<String> bulkNames) async {
     if (_selectedBulkIds.isEmpty) return;
     final selectedProduits = _produits.where((p) => _selectedBulkIds.contains(p.idProduits)).toList();
@@ -564,18 +616,28 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     bulkCounts: bulkCounts,
                     bulkNames: bulkNames,
                     onChanged: _onBulkFiltreChanged,
+                    canRename: _canOrganizeBulk,
+                    onRename: _renommerBulk,
                   ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                if (isAchatBulkNomme && _canOrganizeBulk)
+                if (isAchatBulkNomme && _canOrganizeBulk) ...[
                   SliverToBoxAdapter(
                     child: _EntrerToutStockHeader(bulk: _bulkFiltreActif, onTap: () => _entrerToutStock(_bulkFiltreActif)),
-                  )
-                else if (isAchatSansBulk && _selectedBulkIds.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _DeplacerHeader(count: _selectedBulkIds.length, onDeplacer: () => _ouvrirModalDeplacer(bulkNames)),
                   ),
-                const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                ],
+                if (_canOrganizeBulk) ...[
+                  SliverToBoxAdapter(
+                    child: _SelectionToolbar(
+                      allSelected: achatFiltres.isNotEmpty && achatFiltres.every((p) => _selectedBulkIds.contains(p.idProduits)),
+                      onToggleSelectAll: () => _toggleSelectAllBulk(achatFiltres),
+                      count: _selectedBulkIds.length,
+                      onDeplacer: () => _ouvrirModalDeplacer(bulkNames),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                ],
               ],
               const SliverToBoxAdapter(child: SizedBox(height: 4)),
               if (_loading)
@@ -602,9 +664,10 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                       isAchatConfirmeVue: true,
                       onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
                       onEntrerEnStockAchat: _entrerEnStockAchat,
-                      selectionMode: isAchatSansBulk,
+                      selectionMode: _canOrganizeBulk,
                       selectedIds: _selectedBulkIds,
                       onCheckChanged: _onBulkCheckChanged,
+                      startExpanded: _canOrganizeBulk,
                     ),
                   )
               else if (groups.isEmpty)
@@ -749,6 +812,8 @@ class _BulkFiltreBar extends StatelessWidget {
     required this.bulkCounts,
     required this.bulkNames,
     required this.onChanged,
+    this.canRename = false,
+    this.onRename,
   });
 
   final String filtreActif;
@@ -757,10 +822,12 @@ class _BulkFiltreBar extends StatelessWidget {
   final Map<String, int> bulkCounts;
   final List<String> bulkNames;
   final ValueChanged<String> onChanged;
+  final bool canRename;
+  final ValueChanged<String>? onRename;
 
   @override
   Widget build(BuildContext context) {
-    Widget chip({required String key, required String label, required IconData icon, required int count}) {
+    Widget chip({required String key, required String label, required IconData icon, required int count, bool renameable = false}) {
       final selected = filtreActif == key;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
@@ -769,7 +836,7 @@ class _BulkFiltreBar extends StatelessWidget {
           onTap: () => onChanged(key),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            constraints: const BoxConstraints(maxWidth: 220),
+            constraints: const BoxConstraints(maxWidth: 240),
             decoration: BoxDecoration(
               gradient: selected
                   ? const LinearGradient(colors: [AppColors.accent, AppColors.green])
@@ -800,6 +867,13 @@ class _BulkFiltreBar extends StatelessWidget {
                   ),
                   child: Text('$count', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textSecondary)),
                 ),
+                if (renameable && canRename) ...[
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () => onRename?.call(label),
+                    child: Icon(Icons.edit_rounded, size: 13, color: selected ? Colors.white.withValues(alpha: 0.85) : AppColors.textSecondary),
+                  ),
+                ],
               ],
             ),
           ),
@@ -814,7 +888,7 @@ class _BulkFiltreBar extends StatelessWidget {
         children: [
           chip(key: '__sans_bulk__', label: 'Les articles sans bulk', icon: Icons.help_outline_rounded, count: sansBulkCount),
           chip(key: '__tous__', label: 'Afficher tout', icon: Icons.layers_rounded, count: totalCount),
-          for (final name in bulkNames) chip(key: name, label: name, icon: Icons.folder_rounded, count: bulkCounts[name] ?? 0),
+          for (final name in bulkNames) chip(key: name, label: name, icon: Icons.folder_rounded, count: bulkCounts[name] ?? 0, renameable: true),
         ],
       ),
     );
@@ -875,43 +949,75 @@ class _EntrerToutStockHeader extends StatelessWidget {
   }
 }
 
-/// Barre "N sélectionné(s) / Déplacer sur un bulk" (vue "Sans bulk" avec
-/// sélection) — affichée en haut de la liste d'articles (pas en bas), comme
-/// `.aca-deplacer-header` côté web.
-class _DeplacerHeader extends StatelessWidget {
-  const _DeplacerHeader({required this.count, required this.onDeplacer});
+/// Barre de sélection (toutes les vues, patron/gérant) : "Tout
+/// sélectionner"/"Tout désélectionner" toujours visible, et "N
+/// sélectionné(s) / Déplacer sur un bulk" dès qu'un article est coché —
+/// affichée en haut de la liste d'articles (pas en bas), comme
+/// `.aca-selection-toolbar` côté web.
+class _SelectionToolbar extends StatelessWidget {
+  const _SelectionToolbar({
+    required this.allSelected,
+    required this.onToggleSelectAll,
+    required this.count,
+    required this.onDeplacer,
+  });
+
+  final bool allSelected;
+  final VoidCallback onToggleSelectAll;
   final int count;
   final VoidCallback onDeplacer;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF141826), Color(0xFF0D1018)]),
-        border: Border.all(color: AppColors.borderAccent),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Icon(Icons.check_circle_rounded, size: 16, color: AppColors.green),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text('$count sélectionné(s)', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
-          ),
-          ElevatedButton.icon(
-            onPressed: onDeplacer,
-            icon: const Icon(Icons.folder_open_rounded, size: 16),
-            label: const Text('Déplacer sur un bulk'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          OutlinedButton.icon(
+            onPressed: onToggleSelectAll,
+            icon: const Icon(Icons.checklist_rounded, size: 16),
+            label: Text(allSelected ? 'Tout désélectionner' : 'Tout sélectionner'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textPrimary,
+              side: const BorderSide(color: AppColors.border),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
             ),
           ),
+          if (count > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF141826), Color(0xFF0D1018)]),
+                border: Border.all(color: AppColors.borderAccent),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 15, color: AppColors.green),
+                  const SizedBox(width: 6),
+                  Text('$count sélectionné(s)', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.green)),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: onDeplacer,
+                    icon: const Icon(Icons.folder_open_rounded, size: 15),
+                    label: const Text('Déplacer sur un bulk'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

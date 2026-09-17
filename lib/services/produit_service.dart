@@ -264,6 +264,18 @@ class ProduitService {
     return SaveProduitResult(success: !error, message: data['msg']?.toString());
   }
 
+  /// Panneau "classeurs", patron/gérant uniquement : renomme un bulk (tous
+  /// les articles qui le portent) — équivalent de `Produit::renommer_bulk()`.
+  Future<SaveProduitResult> renommerBulk({required String ancien, required String nouveau}) async {
+    final data = await ApiClient.instance.post('renommer_bulk', fields: {
+      'ancien': ancien,
+      'nouveau': nouveau,
+    });
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return SaveProduitResult(success: !error, message: data['msg']?.toString());
+  }
+
   /// Onglet "Achat en attente" (patron uniquement) — équivalent de
   /// `Produit::confirmer_achat()`.
   Future<SaveProduitResult> confirmerAchat({required String idProduits}) async {
