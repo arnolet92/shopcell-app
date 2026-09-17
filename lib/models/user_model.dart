@@ -43,10 +43,10 @@ class UserModel {
 
   /// Rôles ayant accès à toutes les informations d'un article (prix d'achat,
   /// prix de revient, capacité, couleur, carton, défaut, stockage,
-  /// fournisseur, description...) dans "Gestion d'article". Les autres
-  /// comptes n'y voient que : prix de vente, modèle, série, IMEI 1/2 et
-  /// batterie.
-  bool get hasFullArticleAccess => const {'patron', 'gerant', 'magasinier'}.contains(role);
+  /// fournisseur, description...) dans "Gestion d'article" — seuls
+  /// patron et magasinier. Les autres comptes (dont gérant) n'y voient que :
+  /// prix de vente, modèle, série, IMEI 1/2 et batterie.
+  bool get hasFullArticleAccess => const {'patron', 'magasinier'}.contains(role);
 
   String get roleLabel {
     switch (role) {

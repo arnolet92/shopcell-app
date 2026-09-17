@@ -667,7 +667,6 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                       selectionMode: _canOrganizeBulk,
                       selectedIds: _selectedBulkIds,
                       onCheckChanged: _onBulkCheckChanged,
-                      startExpanded: _canOrganizeBulk,
                     ),
                   )
               else if (groups.isEmpty)
@@ -909,8 +908,8 @@ class _EntrerToutStockHeader extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [AppColors.green.withValues(alpha: 0.1), AppColors.green.withValues(alpha: 0.03)]),
-        border: Border.all(color: AppColors.green.withValues(alpha: 0.25)),
+        gradient: LinearGradient(colors: [AppColors.red.withValues(alpha: 0.1), AppColors.red.withValues(alpha: 0.03)]),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.25)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -931,16 +930,24 @@ class _EntrerToutStockHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: onTap,
-            icon: const Icon(Icons.move_to_inbox_rounded, size: 16),
-            label: const Text('Entrer tout dans stock'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.green,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [AppColors.red, Color(0xFFA3123F)]),
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: [BoxShadow(color: AppColors.red.withValues(alpha: 0.35), blurRadius: 14, offset: const Offset(0, 4))],
+            ),
+            child: ElevatedButton.icon(
+              onPressed: onTap,
+              icon: const Icon(Icons.move_to_inbox_rounded, size: 16),
+              label: const Text('Entrer tout dans stock'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+              ),
             ),
           ),
         ],
