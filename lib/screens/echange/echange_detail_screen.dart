@@ -49,7 +49,6 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
 
   final _produitSearchCtrl = TextEditingController();
   final _prixVenteCtrl = TextEditingController();
-  final _prixActuelReprisCtrl = TextEditingController();
   final _motifCtrl = TextEditingController();
   final _batterieCtrl = TextEditingController();
   Timer? _debounceProduit;
@@ -88,7 +87,6 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   void dispose() {
     _produitSearchCtrl.dispose();
     _prixVenteCtrl.dispose();
-    _prixActuelReprisCtrl.dispose();
     _motifCtrl.dispose();
     _batterieCtrl.dispose();
     _montantCtrl.dispose();
@@ -106,8 +104,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     });
     // Pré-remplit avec la batterie actuelle de l'article retourné (modifiable
     // ensuite) — n'apparaît que si "avec défaut" est activé — et avec son
-    // prix de vente d'origine pour "Prix actuel" (valeur de reprise,
-    // modifiable avant validation).
+    // prix de vente d'origine pour "Prix actuel" (valeur de reprise de
+    // l'article RETOURNÉ, modifiable avant validation).
     final lignes = (facture?['lignes'] as List?) ?? [];
     final ligne = lignes.cast<Map<String, dynamic>?>().firstWhere(
           (l) => '${l?['id_ventes']}' == widget.idVentes,
@@ -119,7 +117,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     }
     final prixVentesOrigine = ligne?['prix_ventes'];
     final prixActuelDefault = prixVentesOrigine is num ? prixVentesOrigine.toDouble() : double.tryParse('$prixVentesOrigine') ?? 0;
-    _prixActuelReprisCtrl.text = prixActuelDefault.toStringAsFixed(0);
+    _prixVenteCtrl.text = prixActuelDefault.toStringAsFixed(0);
   }
 
   Map<String, dynamic>? get _entete => _facture?['entete'] as Map<String, dynamic>?;
@@ -150,9 +148,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _selectedProduit = p;
       _produitResults = [];
       _produitSearchCtrl.clear();
-      // "Prix de vente" est automatique (prix catalogue de l'article choisi)
-      // mais modifiable ensuite.
-      _prixVenteCtrl.text = p.prixUnitaire.toStringAsFixed(0);
+      // Le prix du nouvel article n'est pas saisi ici : son prix catalogue
+      // est utilisé automatiquement côté serveur. "_prixVenteCtrl" reste le
+      // "Prix actuel" (valeur de reprise de l'article RETOURNÉ) et n'est pas
+      // modifié en sélectionnant l'article.
     });
     await _refreshRecap();
   }
@@ -171,12 +170,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     final produit = _selectedProduit;
     if (produit == null) return;
     setState(() => _recapLoading = true);
-    final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
-    final prixActuelRepris = double.tryParse(_prixActuelReprisCtrl.text.replaceAll(' ', ''));
+    final prixActuelRepris = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
     final rec = await EchangeService.instance.recap(
       idVentes: widget.idVentes,
       newProduitsId: produit.idProduits,
-      prixVente: prixVente,
       prixActuelRepris: prixActuelRepris,
       nonUpgrade: _nonUpgrade,
     );
@@ -252,8 +249,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       _submitting = true;
       _error = null;
     });
-    final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', '')) ?? rec.newPrixUnitaire;
-    final prixActuelRepris = double.tryParse(_prixActuelReprisCtrl.text.replaceAll(' ', ''));
+    // Le prix du nouvel article n'est plus édité : on renvoie tel quel celui
+    // que le serveur a calculé (son prix catalogue) lors du dernier recap.
+    final prixVente = rec.newPrixUnitaire;
+    final prixActuelRepris = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', '')) ?? 0;
     final result = await EchangeService.instance.valider(
       idVentes: widget.idVentes,
       newProduitsId: produit.idProduits,
@@ -674,16 +673,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       children: [
         InlineField(
           label: 'Prix actuel (prix vente article retourné) (Ar)',
-          controller: _prixActuelReprisCtrl,
-          prefixIcon: Icons.price_change_rounded,
-          keyboardType: TextInputType.number,
-          onChanged: _onPrixChanged,
-        ),
-        const SizedBox(height: 14),
-        InlineField(
-          label: 'Prix de vente (article en échange, sortie du stock) (Ar)',
           controller: _prixVenteCtrl,
-          prefixIcon: Icons.sell_rounded,
+          prefixIcon: Icons.price_change_rounded,
           keyboardType: TextInputType.number,
           onChanged: _onPrixChanged,
         ),
