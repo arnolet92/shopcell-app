@@ -468,7 +468,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InlineField(
-          label: 'Prix actuel (prix vente article retourné) (Ar)',
+          label: 'Prix de vente (article en échange, sortie du stock) (Ar)',
           controller: _prixVenteCtrl,
           prefixIcon: Icons.sell_rounded,
           keyboardType: TextInputType.number,

@@ -221,11 +221,21 @@ class EchangeService {
   /// [prixVente] : "prix de vente" (modifiable) du produit qui sort de
   /// stock — par défaut son prix catalogue si non fourni. "Prix ajouté"
   /// n'est plus un paramètre : il est recalculé côté serveur.
+  /// [prixActuelRepris] : "Prix actuel" (modifiable), valeur de reprise de
+  /// l'article RETOURNÉ — par défaut le prix auquel il a été vendu à
+  /// l'origine si non fourni.
   /// [nonUpgrade] : force le prix ajouté à 0 côté serveur, quel que soit
   /// le prix affiché (article repris de valeur équivalente).
-  Future<EchangeRecap> recap({required String idVentes, required String newProduitsId, double? prixVente, bool nonUpgrade = false}) async {
+  Future<EchangeRecap> recap({
+    required String idVentes,
+    required String newProduitsId,
+    double? prixVente,
+    double? prixActuelRepris,
+    bool nonUpgrade = false,
+  }) async {
     final fields = <String, String>{'id_ventes': idVentes, 'new_produits_id': newProduitsId, 'non_upgrade': nonUpgrade ? '1' : '0'};
     if (prixVente != null) fields['prix_vente'] = prixVente.toString();
+    if (prixActuelRepris != null) fields['prix_actuel_repris'] = prixActuelRepris.toString();
     final data = await ApiClient.instance.post('echange_recap', fields: fields);
     if (data is! Map) return EchangeRecap(error: true, message: 'Réponse du serveur invalide.');
     return EchangeRecap.fromJson(Map<String, dynamic>.from(data));
@@ -235,6 +245,7 @@ class EchangeService {
     required String idVentes,
     required String newProduitsId,
     required double prixVente,
+    double? prixActuelRepris,
     required bool isDefaut,
     String? motifReparation,
     String? batterie,
@@ -254,6 +265,7 @@ class EchangeService {
       'user': jsonEncode(user.mobPayload),
       'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
     };
+    if (prixActuelRepris != null) fields['prix_actuel_repris'] = prixActuelRepris.toString();
     if (motifReparation != null && motifReparation.trim().isNotEmpty) {
       fields['motif_reparation'] = motifReparation.trim();
     }
