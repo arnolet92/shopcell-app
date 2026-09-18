@@ -60,6 +60,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   bool _nonUpgrade = false;
   EchangeRecap? _recap;
   bool _recapLoading = false;
+  int _recapRequestSeq = 0;
 
   List<LookupItem> _typesPaiement = [];
   String? _selectedTypePaiementId;
@@ -169,6 +170,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   Future<void> _refreshRecap() async {
     final produit = _selectedProduit;
     if (produit == null) return;
+    final seq = ++_recapRequestSeq;
     setState(() => _recapLoading = true);
     final prixActuelRepris = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
     final rec = await EchangeService.instance.recap(
@@ -177,7 +179,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       prixActuelRepris: prixActuelRepris,
       nonUpgrade: _nonUpgrade,
     );
-    if (!mounted) return;
+    // Ignore une réponse arrivée en retard (une frappe plus récente a déjà
+    // relancé un appel plus à jour) — sinon un recap obsolète pouvait écraser
+    // le résultat le plus récent après une modification rapide du prix.
+    if (!mounted || seq != _recapRequestSeq) return;
     setState(() {
       _recap = rec;
       _recapLoading = false;

@@ -54,6 +54,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
   bool _nonUpgrade = false;
   EchangeRecap? _recap;
   bool _recapLoading = false;
+  int _recapRequestSeq = 0;
 
   bool _submitting = false;
   bool _proformaSubmitting = false;
@@ -98,6 +99,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
   Future<void> _refreshRecap() async {
     final produit = _selectedProduit;
     if (produit == null) return;
+    final seq = ++_recapRequestSeq;
     setState(() => _recapLoading = true);
     final prixActuelRepris = double.tryParse(_prixActuelReprisCtrl.text.replaceAll(' ', '')) ?? 0;
     final prixVente = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', ''));
@@ -108,7 +110,9 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
       prixVente: prixVente,
       nonUpgrade: _nonUpgrade,
     );
-    if (!mounted) return;
+    // Ignore une réponse arrivée en retard (une frappe plus récente a déjà
+    // relancé un appel plus à jour).
+    if (!mounted || seq != _recapRequestSeq) return;
     setState(() {
       _recap = rec;
       _recapLoading = false;
