@@ -167,6 +167,9 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
     if (!mounted) return;
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
+      // L'échange apparaît désormais dans "Factures payées" (voir
+      // FactureManage::searchFacturesPayees) : la liste en cache est périmée.
+      AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
       // La description montre l'article REMIS au client (sortie du stock).
       // L'article REPRIS (retourné) est affiché à part sous "Article

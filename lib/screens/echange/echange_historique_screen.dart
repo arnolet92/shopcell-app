@@ -4,11 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
-import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/echange_service.dart';
-import '../../services/receipt_print_service.dart';
-import '../../widgets/client_info_dialog.dart';
+import '../../services/echange_print.dart';
 import '../../widgets/inline_field.dart';
 
 String _fmt(double v) {
@@ -99,65 +97,14 @@ class _EchangeHistoriqueScreenState extends State<EchangeHistoriqueScreen> {
   Future<void> _reprint(EchangeHistoItem item) async {
     if (_printingId != null) return;
     setState(() => _printingId = item.idEchange);
-    final j = item.raw;
-    String? s(dynamic v) {
-      final t = v?.toString().trim();
-      return (t == null || t.isEmpty) ? null : t;
-    }
-
-    double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
-    final newPrixUnitaire = d(j['new_prix_unitaire']);
-    final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : newPrixUnitaire;
-    // La description montre l'article REMIS au client (sortie du stock) —
-    // l'article REPRIS (retourné en stock) est affiché à part, sous
-    // "Article retourné", via `articleRetourne`.
-    final lines = [
-      ReceiptLine(
-        designation: s(j['new_designation']) ?? item.newDesignation,
-        qte: 1,
-        prixUnitaire: prixUnitaireTicket,
-        total: prixUnitaireTicket,
-        numSerie: s(j['new_num_serie']),
-        imei1: s(j['new_imei1']),
-        imei2: s(j['new_imei2']),
-        nomModel: s(j['new_nom_model']),
-        nomMarque: s(j['new_nom_marque']),
-      ),
-    ];
-    final articleRetourne = ReceiptLine(
-      designation: s(j['old_designation']) ?? item.oldDesignation,
-      qte: 1,
-      prixUnitaire: 0,
-      total: 0,
-      numSerie: s(j['old_num_serie']),
-      imei1: s(j['old_imei1']),
-      imei2: s(j['old_imei2']),
-      nomModel: s(j['old_nom_model']),
-      nomMarque: s(j['old_nom_marque']),
-    );
-
-    final clientInfo = await showClientInfoDialog(
+    // Même document que celui imprimé depuis la liste des factures payées
+    // (voir echange_print.dart) : article REMIS en ligne principale,
+    // article RETOURNÉ en bas.
+    final message = await printEchangeFromJson(
       context,
-      initialNom: s(j['client_nom_complet']),
-      initialPrenom: s(j['client_prenom']),
-      initialTelephone: s(j['client_telephone']),
-      initialCin: s(j['client_cin']),
-    );
-    if (!mounted) return;
-
-    final message = await ReceiptPrintService.instance.offerPrint(
-      context,
-      lines: lines,
-      total: prixUnitaireTicket,
-      cashierName: widget.user.nomComplet,
-      clientName: clientInfo?.nom,
-      clientPrenom: clientInfo?.prenom,
-      clientTelephone: clientInfo?.telephone,
-      clientCin: clientInfo?.cin,
+      item.raw,
+      user: widget.user,
       numeroFacture: item.numeroFacture,
-      dateFacture: item.dateRaw,
-      isEchange: true,
-      articleRetourne: articleRetourne,
     );
     if (!mounted) return;
     setState(() => _printingId = null);

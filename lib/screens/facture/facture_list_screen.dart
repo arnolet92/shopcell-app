@@ -8,6 +8,9 @@ import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
 import '../../widgets/inline_field.dart';
 import 'facture_detail_screen.dart';
+import 'facture_echange_detail_screen.dart';
+
+const Color _echangeColor = Color(0xFFA78BFA);
 
 String _fmt(double v) {
   final s = v.round().toString();
@@ -155,6 +158,14 @@ class _FactureListScreenState extends State<FactureListScreen> {
   }
 
   Future<void> _openDetail(FactureListItem item) async {
+    // Un ÉCHANGE a son propre détail (article remis, sans annulation, avec
+    // impression du ticket d'échange) — voir FactureEchangeDetailScreen.
+    if (item.isEchange) {
+      await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => FactureEchangeDetailScreen(item: item, user: widget.user),
+      ));
+      return;
+    }
     final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => FactureDetailScreen(
         idClient: item.idClient,
@@ -324,17 +335,32 @@ class _FactureCard extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border)),
+          decoration: BoxDecoration(
+            color: AppColors.bgCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: item.isEchange ? _echangeColor.withValues(alpha: .45) : AppColors.border),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(Icons.receipt_rounded, size: 16, color: accent),
+                Icon(item.isEchange ? Icons.swap_horiz_rounded : Icons.receipt_rounded, size: 16, color: item.isEchange ? _echangeColor : accent),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(item.numeroFacture, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis),
                 ),
-                Text(_fmt(item.montant), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: accent)),
+                if (item.isEchange)
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _echangeColor.withValues(alpha: .15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _echangeColor.withValues(alpha: .4)),
+                    ),
+                    child: Text('Échange', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: _echangeColor)),
+                  ),
+                Text(_fmt(item.montant), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: item.isEchange ? _echangeColor : accent)),
               ]),
               if (item.articlesApercu != null) ...[
                 const SizedBox(height: 4),

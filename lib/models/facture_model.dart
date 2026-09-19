@@ -26,6 +26,9 @@ class FactureListItem {
     required this.montant,
     this.articlesApercu,
     this.dateReference,
+    this.isEchange = false,
+    this.idEchange,
+    this.echangeRaw,
   });
 
   final String idClient;
@@ -49,6 +52,16 @@ class FactureListItem {
   /// choisi par l'écran appelant.
   final String? dateReference;
 
+  /// Cette ligne est un ÉCHANGE (et non une facture) : montant = montant
+  /// total de l'échange, `articlesApercu` = article REMIS. Miroir de la carte
+  /// "Échange" de `tab_payed.php` côté web.
+  final bool isEchange;
+  final String? idEchange;
+  /// Ligne JSON brute de l'échange (old_*/new_*, prix_ajoute, client...) —
+  /// sert directement à afficher son détail et à imprimer le ticket
+  /// d'échange, sans second aller-retour serveur.
+  final Map<String, dynamic>? echangeRaw;
+
   /// Nom à afficher : client enregistré, sinon visiteur de passage — même
   /// repli que `tab_payed.php`/`tab_cancel.php` (`is_null(personnes_id)`).
   /// Nom, prénom, téléphone, CIN affichés séparément (pas fusionnés) —
@@ -61,7 +74,11 @@ class FactureListItem {
   String get contactAffiche => _s(telephone) ?? _s(telephoneVisiteur) ?? '-';
 
   factory FactureListItem.fromJson(Map<String, dynamic> j, {required String dateField}) {
+    final isEchange = '${j['is_echange'] ?? '0'}' == '1';
     return FactureListItem(
+      isEchange: isEchange,
+      idEchange: isEchange ? _s(j['id_echange']) : null,
+      echangeRaw: isEchange ? j : null,
       idClient: '${j['id_client'] ?? ''}',
       numeroFacture: _s(j['numero_facture']) ?? '-',
       referenceClient: _s(j['reference_client']),
