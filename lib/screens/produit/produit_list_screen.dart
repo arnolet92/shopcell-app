@@ -14,6 +14,7 @@ import '../../services/cart_service.dart';
 import '../../services/produit_service.dart';
 import '../vente/cart_screen.dart';
 import 'produit_form_screen.dart';
+import 'widgets/achat_confirme_widgets.dart';
 import 'widgets/produit_filter_bar.dart';
 import 'widgets/produit_group_card.dart';
 import 'widgets/stat_bar.dart';
@@ -54,6 +55,9 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   String _bulkFiltreActif = '__sans_bulk__';
   final Set<String> _selectedBulkIds = {};
   bool get _canOrganizeBulk => _user?.role == 'patron' || _user?.role == 'gerant';
+  // Tiroir des bulks de la page "Achat confirmé" (fermé par défaut, ouvert par
+  // l'icône dossier de l'en-tête) — distinct du tiroir principal de HomeShell.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -159,6 +163,14 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
       _vue = vue;
       _bulkFiltreActif = '__sans_bulk__';
       _selectedBulkIds.clear();
+      // La page "Achat confirmé" n'a ni champ de recherche ni filtres
+      // (famille, capacité...) : on ne garde surtout pas ceux d'un autre
+      // onglet, qui filtreraient la liste sans qu'on puisse les voir.
+      if (vue == ProduitVue.achatConfirme) {
+        _query = '';
+        _selection = FilterSelection.empty;
+        _searchController.clear();
+      }
     });
     _reload();
   }
@@ -527,6 +539,129 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 
     final cart = CartService.instance;
 
+    if (isAchatConfirmeVue) {
+      // Page "Achat confirmé" : pas d'en-tête de stats (déplacées en pied de
+      // page), ni recherche ni filtres ; les menus "Sans bulk"/"Afficher
+      // tout"/bulks sont dans un tiroir à gauche, fermé par défaut ; le titre
+      // suit le menu choisi ; "Créer un article" se réduit à un "+".
+      final valeurStockAchat = achatFiltres.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixUnitaire));
+      final valeurAchatAchat = achatFiltres.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
+      return Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: AppColors.bgDeep,
+        drawerEnableOpenDragGesture: false,
+        drawer: AchatBulkDrawer(
+          filtreActif: _bulkFiltreActif,
+          totalCount: _produits.length,
+          sansBulkCount: sansBulkCount,
+          bulkCounts: bulkCounts,
+          bulkNames: bulkNames,
+          onChanged: _onBulkFiltreChanged,
+          canRename: _canOrganizeBulk,
+          onRename: _renommerBulk,
+        ),
+        floatingActionButton: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!cart.isEmpty) ...[
+              FloatingActionButton.extended(
+                heroTag: 'produit-cart-fab',
+                onPressed: _openCart,
+                backgroundColor: AppColors.green,
+                icon: const Icon(Icons.shopping_cart_rounded, color: Colors.black),
+                label: Text(
+                  '${cart.count} · ${cart.total.toStringAsFixed(0)} Ar',
+                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            FloatingActionButton(
+              heroTag: 'produit-create-fab',
+              tooltip: 'Créer un article',
+              onPressed: _openCreate,
+              backgroundColor: AppColors.accent,
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+            ),
+          ],
+        ),
+        bottomNavigationBar: AchatFooterBar(
+          nbArticles: achatFiltres.length,
+          valeurStock: valeurStockAchat,
+          valeurAchat: valeurAchatAchat,
+          restrictedInfo: restrictedInfo,
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: RefreshIndicator(
+            color: AppColors.accentLight,
+            backgroundColor: AppColors.bgCard,
+            onRefresh: _bootstrap,
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: AchatConfirmeHeader(
+                    titre: titreBulkFiltre(_bulkFiltreActif),
+                    sousTitre: 'Achat confirmé · ${achatFiltres.length} article${achatFiltres.length > 1 ? 's' : ''}',
+                    onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged)),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                if (isAchatBulkNomme && _canOrganizeBulk) ...[
+                  SliverToBoxAdapter(
+                    child: _EntrerToutStockHeader(bulk: _bulkFiltreActif, onTap: () => _entrerToutStock(_bulkFiltreActif)),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                ],
+                if (_canOrganizeBulk) ...[
+                  SliverToBoxAdapter(
+                    child: _SelectionToolbar(
+                      allSelected: achatFiltres.isNotEmpty && achatFiltres.every((p) => _selectedBulkIds.contains(p.idProduits)),
+                      onToggleSelectAll: () => _toggleSelectAllBulk(achatFiltres),
+                      count: _selectedBulkIds.length,
+                      onDeplacer: () => _ouvrirModalDeplacer(bulkNames),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                ],
+                if (_loading)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(child: CircularProgressIndicator(color: AppColors.accentLight)),
+                  )
+                else if (_error != null)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _ErrorState(message: _error!, onRetry: _reload),
+                  )
+                else if (achatGroups.isEmpty)
+                  const SliverFillRemaining(hasScrollBody: false, child: _EmptyState())
+                else
+                  SliverList.builder(
+                    itemCount: achatGroups.length,
+                    itemBuilder: (context, i) => ProduitGroupCard(
+                      group: achatGroups[i],
+                      baseUrl: _baseUrl,
+                      imagesParDesignation: _imagesParDesignation,
+                      restrictedInfo: restrictedInfo,
+                      isAchatConfirmeVue: true,
+                      onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
+                      onEntrerEnStockAchat: _entrerEnStockAchat,
+                      selectionMode: _canOrganizeBulk,
+                      selectedIds: _selectedBulkIds,
+                      onCheckChanged: _onBulkCheckChanged,
+                    ),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 90)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.bgDeep,
       floatingActionButton: Column(
@@ -607,38 +742,6 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   onSelectionChanged: _onSelectionChanged,
                 ),
               ),
-              if (isAchatConfirmeVue) ...[
-                SliverToBoxAdapter(
-                  child: _BulkFiltreBar(
-                    filtreActif: _bulkFiltreActif,
-                    totalCount: _produits.length,
-                    sansBulkCount: sansBulkCount,
-                    bulkCounts: bulkCounts,
-                    bulkNames: bulkNames,
-                    onChanged: _onBulkFiltreChanged,
-                    canRename: _canOrganizeBulk,
-                    onRename: _renommerBulk,
-                  ),
-                ),
-                const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                if (isAchatBulkNomme && _canOrganizeBulk) ...[
-                  SliverToBoxAdapter(
-                    child: _EntrerToutStockHeader(bulk: _bulkFiltreActif, onTap: () => _entrerToutStock(_bulkFiltreActif)),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                ],
-                if (_canOrganizeBulk) ...[
-                  SliverToBoxAdapter(
-                    child: _SelectionToolbar(
-                      allSelected: achatFiltres.isNotEmpty && achatFiltres.every((p) => _selectedBulkIds.contains(p.idProduits)),
-                      onToggleSelectAll: () => _toggleSelectAllBulk(achatFiltres),
-                      count: _selectedBulkIds.length,
-                      onDeplacer: () => _ouvrirModalDeplacer(bulkNames),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
-                ],
-              ],
               const SliverToBoxAdapter(child: SizedBox(height: 4)),
               if (_loading)
                 const SliverFillRemaining(
@@ -650,25 +753,6 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   hasScrollBody: false,
                   child: _ErrorState(message: _error!, onRetry: _reload),
                 )
-              else if (isAchatConfirmeVue)
-                if (achatGroups.isEmpty)
-                  const SliverFillRemaining(hasScrollBody: false, child: _EmptyState())
-                else
-                  SliverList.builder(
-                    itemCount: achatGroups.length,
-                    itemBuilder: (context, i) => ProduitGroupCard(
-                      group: achatGroups[i],
-                      baseUrl: _baseUrl,
-                      imagesParDesignation: _imagesParDesignation,
-                      restrictedInfo: restrictedInfo,
-                      isAchatConfirmeVue: true,
-                      onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
-                      onEntrerEnStockAchat: _entrerEnStockAchat,
-                      selectionMode: _canOrganizeBulk,
-                      selectedIds: _selectedBulkIds,
-                      onCheckChanged: _onBulkCheckChanged,
-                    ),
-                  )
               else if (groups.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -790,104 +874,6 @@ class _ErrorState extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           TextButton(onPressed: onRetry, child: const Text('Réessayer', style: TextStyle(color: AppColors.accentLight))),
-        ],
-      ),
-    );
-  }
-}
-
-/// Panneau "classeurs" de l'onglet "Achat confirmé" — équivalent mobile du
-/// panneau de gauche (1/4) de `Produit/lst_achat_confirme` côté web : une
-/// barre horizontale de chips (au lieu d'une colonne, écran étroit oblige) —
-/// "Sans bulk" (sélectionné par défaut) en premier, puis "Afficher tout",
-/// puis un chip par bulk existant. Les actions ("Entrer tout dans stock",
-/// "Déplacer sur un bulk") sont affichées séparément en haut de la liste
-/// d'articles, pas ici (voir _EntrerToutStockHeader/_DeplacerHeader).
-class _BulkFiltreBar extends StatelessWidget {
-  const _BulkFiltreBar({
-    required this.filtreActif,
-    required this.totalCount,
-    required this.sansBulkCount,
-    required this.bulkCounts,
-    required this.bulkNames,
-    required this.onChanged,
-    this.canRename = false,
-    this.onRename,
-  });
-
-  final String filtreActif;
-  final int totalCount;
-  final int sansBulkCount;
-  final Map<String, int> bulkCounts;
-  final List<String> bulkNames;
-  final ValueChanged<String> onChanged;
-  final bool canRename;
-  final ValueChanged<String>? onRename;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget chip({required String key, required String label, required IconData icon, required int count, bool renameable = false}) {
-      final selected = filtreActif == key;
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => onChanged(key),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            constraints: const BoxConstraints(maxWidth: 240),
-            decoration: BoxDecoration(
-              gradient: selected
-                  ? const LinearGradient(colors: [AppColors.accent, AppColors.green])
-                  : null,
-              color: selected ? null : AppColors.bgElevated,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: selected ? Colors.transparent : AppColors.border),
-              boxShadow: selected ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 13, color: selected ? Colors.white : AppColors.textSecondary),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? Colors.white : AppColors.textPrimary),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: selected ? Colors.white.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('$count', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: selected ? Colors.white : AppColors.textSecondary)),
-                ),
-                if (renameable && canRename) ...[
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: () => onRename?.call(label),
-                    child: Icon(Icons.edit_rounded, size: 13, color: selected ? Colors.white.withValues(alpha: 0.85) : AppColors.textSecondary),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          chip(key: '__sans_bulk__', label: 'Les articles sans bulk', icon: Icons.help_outline_rounded, count: sansBulkCount),
-          chip(key: '__tous__', label: 'Afficher tout', icon: Icons.layers_rounded, count: totalCount),
-          for (final name in bulkNames) chip(key: name, label: name, icon: Icons.folder_rounded, count: bulkCounts[name] ?? 0, renameable: true),
         ],
       ),
     );
