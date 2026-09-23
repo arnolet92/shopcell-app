@@ -545,7 +545,9 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
       // tout"/bulks sont dans un tiroir à gauche, fermé par défaut ; le titre
       // suit le menu choisi ; "Créer un article" se réduit à un "+".
       final valeurStockAchat = achatFiltres.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixUnitaire));
-      final valeurAchatAchat = achatFiltres.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
+      // "Total achat" de cette page = coût réel (prix de revient), pas le
+      // prix d'achat brut — même règle que les entêtes de groupe ci-dessous.
+      final valeurAchatAchat = achatFiltres.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixRevient));
       return Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.bgDeep,

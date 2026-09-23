@@ -201,7 +201,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                                 ),
                                 if (!widget.restrictedInfo)
                                   _Badge(
-                                    label: '${_fmt(group.totalAchat)} Ar',
+                                    label: '${_fmt(widget.isAchatConfirmeVue ? group.totalRevient : group.totalAchat)} Ar',
                                     color: AppColors.yellow,
                                   ),
                               ],

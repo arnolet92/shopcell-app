@@ -181,6 +181,11 @@ class ProduitGroup {
   double get totalStock => items.fold(0.0, (sum, p) => sum + p.totalStock);
   double get totalAchat =>
       items.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixAchats));
+  /// "Achat confirmé" (Produit/lst_achat_confirme) uniquement : le "Total
+  /// achat" de chaque entête reflète le prix de REVIENT (achat + charges),
+  /// pas le prix d'achat brut — voir tabproduit2.php côté web.
+  double get totalRevient =>
+      items.fold(0.0, (sum, p) => sum + (p.totalStock * p.prixRevient));
 
   /// Ventilation du stock par "capacité" (marque), comme `$stockByCapacity`.
   Map<String, double> get stockByCapacity {
