@@ -4,10 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme.dart';
 import '../../models/facture_model.dart';
 import '../../models/lookup_model.dart';
+import '../../models/payment_split.dart';
+import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/credit_service.dart';
 import '../../services/facture_service.dart';
+import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
@@ -46,6 +49,7 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
   final _sommeCtrl = TextEditingController();
 
   bool _submitting = false;
+  bool _printingRecu = false;
   String? _error;
   bool _changed = false;
 
@@ -132,6 +136,48 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
     }
   }
 
+  /// Réservations uniquement : imprime/partage le reçu (ticket ou A4, avec
+  /// filigrane "Reçue" et conditions de réservation — voir
+  /// ReceiptPrintService/PdfTicketBuilder) de la facture de réservation, avec
+  /// les acomptes déjà versés par type. S'appuie sur la première facture
+  /// impayée du client (en pratique, une réservation ne correspond qu'à une
+  /// seule facture).
+  Future<void> _imprimerRecu() async {
+    final detail = _detail;
+    if (detail == null || detail.list.isEmpty || _printingRecu) return;
+    setState(() => _printingRecu = true);
+    final facture = detail.list.first;
+    final factureDetail = await FactureService.instance.loadDetail(facture.idClient);
+    if (!mounted) return;
+    final lines = [...factureDetail.actifs, ...factureDetail.offerts].map(ReceiptLine.fromFactureArticle).toList();
+    if (lines.isEmpty) {
+      setState(() => _printingRecu = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun article trouvé pour cette réservation.')));
+      return;
+    }
+    final paiements = detail.paiements
+        .map((p) => PaymentSplit(idTypePaiement: p.nomTypePaiement, typeLabel: p.nomTypePaiement, montant: p.donnee))
+        .toList();
+    final message = await ReceiptPrintService.instance.offerPrint(
+      context,
+      lines: lines,
+      total: facture.montant,
+      cashierName: widget.user.nomComplet,
+      clientName: widget.client.nomComplet,
+      clientPrenom: widget.client.prenom,
+      clientTelephone: widget.client.telephone,
+      clientCin: widget.client.cin,
+      paiements: paiements,
+      numeroFacture: facture.numeroFacture,
+      isReservation: true,
+    );
+    if (!mounted) return;
+    setState(() => _printingRecu = false);
+    if (message.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -160,7 +206,27 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _clientCard(),
+                      if (widget.isReservation && detail != null && detail.list.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        OutlinedButton.icon(
+                          onPressed: _printingRecu ? null : _imprimerRecu,
+                          icon: _printingRecu
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)))
+                              : const Icon(Icons.print_rounded, size: 17, color: Color(0xFFA78BFA)),
+                          label: const Text('Imprimer reçu', style: TextStyle(color: Color(0xFFA78BFA))),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFA78BFA)),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            minimumSize: const Size(double.infinity, 0),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
+                      if (widget.isReservation && detail != null && detail.paiements.isNotEmpty) ...[
+                        _paiementsEffectuesSection(detail),
+                        const SizedBox(height: 20),
+                      ],
                       Text('Factures impayées', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                       const SizedBox(height: 8),
                       if (detail == null || detail.list.isEmpty)
@@ -179,6 +245,31 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
                 ),
         ),
       ),
+    );
+  }
+
+  /// Réservations : les acomptes déjà versés, ventilés par type de paiement.
+  Widget _paiementsEffectuesSection(CreditFacturesDetail detail) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Paiements déjà effectués', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: detail.paiements
+              .map((p) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(p.nomTypePaiement, style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted)),
+                      Text(_fmt(p.donnee), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    ]),
+                  ))
+              .toList(),
+        ),
+      ],
     );
   }
 

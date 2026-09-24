@@ -15,6 +15,8 @@ class CreditClient {
   CreditClient({
     required this.idPersonnes,
     required this.nomComplet,
+    this.prenom,
+    this.cin,
     this.telephone,
     this.adresse,
     this.email,
@@ -23,6 +25,10 @@ class CreditClient {
 
   final String idPersonnes;
   final String nomComplet;
+  /// Réservations uniquement (voir PaymentScreen) : prénom/CIN saisis à la
+  /// création, réutilisés pour imprimer le reçu.
+  final String? prenom;
+  final String? cin;
   final String? telephone;
   final String? adresse;
   final String? email;
@@ -38,6 +44,8 @@ class CreditClient {
     return CreditClient(
       idPersonnes: '${j['id_personnes'] ?? ''}',
       nomComplet: s(j['nom_complet']) ?? 'Client',
+      prenom: s(j['prenom_personnes']),
+      cin: s(j['cin_personnes']),
       telephone: s(j['telephone']),
       adresse: s(j['adresse']),
       email: s(j['email']),
@@ -77,12 +85,33 @@ class CreditFacture {
   }
 }
 
+/// Un paiement déjà effectué par ce client, pour un type de paiement donné —
+/// toutes ses factures confondues (voir Mob::credit_factures()).
+class CreditPaiementLigne {
+  CreditPaiementLigne({required this.nomTypePaiement, required this.donnee});
+  final String nomTypePaiement;
+  final double donnee;
+
+  factory CreditPaiementLigne.fromJson(Map<String, dynamic> j) {
+    double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+    return CreditPaiementLigne(nomTypePaiement: j['nom_type_paiement']?.toString() ?? '-', donnee: d(j['donnee']));
+  }
+}
+
 class CreditFacturesDetail {
-  CreditFacturesDetail({required this.list, required this.restant, required this.donnee, required this.totalWithRemise});
+  CreditFacturesDetail({
+    required this.list,
+    required this.restant,
+    required this.donnee,
+    required this.totalWithRemise,
+    this.paiements = const [],
+  });
   final List<CreditFacture> list;
   final double restant;
   final double donnee;
   final double totalWithRemise;
+  /// Paiements déjà effectués, ventilés par type — écran "Réservations".
+  final List<CreditPaiementLigne> paiements;
 }
 
 /// Paiement d'un crédit client (toutes ses factures impayées, réglées dans
@@ -115,11 +144,15 @@ class CreditService {
     final list = (data['list'] is List)
         ? (data['list'] as List).whereType<Map>().map((e) => CreditFacture.fromJson(Map<String, dynamic>.from(e))).toList()
         : <CreditFacture>[];
+    final paiements = (data['paiements'] is List)
+        ? (data['paiements'] as List).whereType<Map>().map((e) => CreditPaiementLigne.fromJson(Map<String, dynamic>.from(e))).toList()
+        : <CreditPaiementLigne>[];
     return CreditFacturesDetail(
       list: list,
       restant: d(data['restant']),
       donnee: d(data['donnee']),
       totalWithRemise: d(data['total_with_remise']),
+      paiements: paiements,
     );
   }
 

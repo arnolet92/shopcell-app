@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../core/api_client.dart';
-import '../core/theme.dart';
 import '../models/payment_split.dart';
 import '../models/receipt_line.dart';
 import '../widgets/print_choice_sheet.dart';
@@ -60,16 +59,7 @@ class ReceiptPrintService {
     // thermique" est toujours proposée (au tap, message vers Paramètres).
     if (!context.mounted) return '';
 
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.bgCard,
-      // Sans isScrollControlled, le bottom sheet est plafonné à ~50% de la
-      // hauteur de l'écran : sur un petit téléphone, "Partager le PDF" ou
-      // "Ne pas imprimer" pouvaient se retrouver coupés/hors champ.
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (_) => PrintChoiceSheet(hasTicket: hasTicket, hasA4: hasA4),
-    );
+    final choice = await showPrintChoiceSheet(context, hasTicket: hasTicket, hasA4: hasA4);
     if (choice == null || choice == 'none') return '';
 
     // La fermeture du bottom sheet (route pop) doit être totalement retombée
