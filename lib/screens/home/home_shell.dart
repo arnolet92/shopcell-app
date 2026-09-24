@@ -24,9 +24,10 @@ const _wideBreakpoint = 760.0;
 const _rechercheIndex = 2;
 const _echangeIndex = 3;
 const _creditIndex = 4;
-const _facturesPayeesIndex = 5;
-const _facturesAnnuleesIndex = 6;
-const _parametresIndex = 7;
+const _reservationsIndex = 5;
+const _facturesPayeesIndex = 6;
+const _facturesAnnuleesIndex = 7;
+const _parametresIndex = 8;
 // "Annulation en attente" (patron uniquement) est toujours ajoutée en
 // DERNIÈRE position par sidebarItemsFor() — voir app_sidebar.dart — donc son
 // index est simplement la longueur de la liste de base, jamais un index fixe
@@ -120,6 +121,12 @@ class _HomeShellState extends State<HomeShell> {
     if (index == _creditIndex) {
       if (_user != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreditClientsScreen(user: _user!)));
+      }
+      return;
+    }
+    if (index == _reservationsIndex) {
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreditClientsScreen(user: _user!, isReservation: true)));
       }
       return;
     }

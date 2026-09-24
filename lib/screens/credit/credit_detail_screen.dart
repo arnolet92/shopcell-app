@@ -28,9 +28,10 @@ String _fmt(double v) {
 /// serveur : le paiement saisi règle les factures impayées de ce client
 /// dans l'ordre le plus ancien d'abord, jusqu'à épuisement de la somme).
 class CreditDetailScreen extends StatefulWidget {
-  const CreditDetailScreen({super.key, required this.client, required this.user});
+  const CreditDetailScreen({super.key, required this.client, required this.user, this.isReservation = false});
   final CreditClient client;
   final UserModel user;
+  final bool isReservation;
 
   @override
   State<CreditDetailScreen> createState() => _CreditDetailScreenState();
@@ -118,7 +119,7 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
     if (!mounted) return;
     if (result.success) {
       _changed = true;
-      AppDataCache.instance.invalidate(CacheDomain.creditClients);
+      if (!widget.isReservation) AppDataCache.instance.invalidate(CacheDomain.creditClients);
       AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message ?? 'Paiement enregistré avec succès.')));
       await _load();

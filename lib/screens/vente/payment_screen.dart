@@ -29,8 +29,14 @@ String _fmtMoney(double v) {
 /// possibilité de scinder en plusieurs paiements, puis "Valider" avec
 /// confirmation et impression du ticket.
 class PaymentScreen extends StatefulWidget {
-  const PaymentScreen({super.key, required this.user});
+  const PaymentScreen({super.key, required this.user, this.isReservation = false});
   final UserModel user;
+  /// true : ouvert depuis le bouton "Réserver" (CartScreen) — client
+  /// obligatoire (nom/prénom/téléphone/CIN), client.is_reservation=1 côté
+  /// serveur, et impression au format "reçu de réservation" (filigrane
+  /// "Reçue", conditions de réservation en pied de page) au lieu du format
+  /// facture habituel — voir ReceiptPrintService/PdfTicketBuilder.
+  final bool isReservation;
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -219,6 +225,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       paiements: splits,
       client: _selectedClient,
       reference: _referenceCtrl.text,
+      isReservation: widget.isReservation,
     );
     if (!mounted) return;
     if (result.success) {
@@ -253,6 +260,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         paiements: splits,
         numeroFacture: result.numeroFacture,
         dateFacture: result.dateFacture,
+        isReservation: widget.isReservation,
       );
       if (!mounted) return;
       CartService.instance.clear();
@@ -297,7 +305,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
       clientPrenom: _selectedClient?.prenom,
       clientTelephone: _selectedClient?.telephone,
       clientCin: _selectedClient?.cin,
+      paiements: _effectiveSplits,
       isProforma: true,
+      isReservation: widget.isReservation,
     );
     if (!mounted) return;
     setState(() => _proformaSubmitting = false);
@@ -316,7 +326,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.bgCard,
         elevation: 0,
-        title: Text('Paiement', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
+        title: Text(widget.isReservation ? 'Réservation' : 'Paiement', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -338,7 +348,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               const SizedBox(height: 20),
 
-              Text('Client (optionnel)', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+              Text(
+                widget.isReservation ? 'Client (obligatoire) — nom, prénom, téléphone, CIN' : 'Client (optionnel)',
+                style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: widget.isReservation ? const Color(0xFFA78BFA) : AppColors.textSecondary),
+              ),
               const SizedBox(height: 8),
               if (_selectedClient != null)
                 Container(

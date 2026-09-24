@@ -48,6 +48,10 @@ class ReceiptPrintService {
     /// affiché à part en bas du PDF A4 — la ligne principale (`lines`)
     /// montre l'article remis au client (sortie du stock).
     ReceiptLine? articleRetourne,
+    /// Bouton "Réserver" : filigrane "Reçue" + pied de page "reçu de
+    /// réservation" (récapitulatif du paiement + conditions de réservation)
+    /// à la place du pied de page facture habituel — voir PdfTicketBuilder.
+    bool isReservation = false,
   }) async {
     final ticketCfg = await PrinterService.instance.config;
     final hasTicket = ticketCfg?.isConfigured ?? false;
@@ -59,6 +63,10 @@ class ReceiptPrintService {
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppColors.bgCard,
+      // Sans isScrollControlled, le bottom sheet est plafonné à ~50% de la
+      // hauteur de l'écran : sur un petit téléphone, "Partager le PDF" ou
+      // "Ne pas imprimer" pouvaient se retrouver coupés/hors champ.
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (_) => PrintChoiceSheet(hasTicket: hasTicket, hasA4: hasA4),
     );
@@ -100,6 +108,8 @@ class ReceiptPrintService {
         isEchange: isEchange,
         isProforma: isProforma,
         articleRetourne: articleRetourne,
+        isReservation: isReservation,
+        paiements: paiements,
       );
       if (choice == 'a4_share') {
         final result = await PrinterService.instance.sharePdf(doc, filename: 'facture_${numeroFacture ?? ''}.pdf');
@@ -166,6 +176,8 @@ class ReceiptPrintService {
     bool isEchange = false,
     bool isProforma = false,
     ReceiptLine? articleRetourne,
+    bool isReservation = false,
+    List<PaymentSplit>? paiements,
   }) async {
     final shopInfo = await VenteService.instance.loadShopInfo();
     final baseUrl = await ApiClient.instance.baseUrl;
@@ -196,6 +208,8 @@ class ReceiptPrintService {
       isEchange: isEchange,
       isProforma: isProforma,
       articleRetourne: articleRetourne,
+      isReservation: isReservation,
+      paiements: paiements,
     );
   }
 }

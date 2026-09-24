@@ -100,6 +100,14 @@ class CreditService {
     return data.whereType<Map>().map((e) => CreditClient.fromJson(Map<String, dynamic>.from(e))).toList();
   }
 
+  /// Miroir de loadClients(), mais pour les RÉSERVATIONS (client.is_reservation=1)
+  /// — voir Mob::reservation_clients().
+  Future<List<CreditClient>> loadReservationClients() async {
+    final data = await ApiClient.instance.post('reservation_clients');
+    if (data is! List) return [];
+    return data.whereType<Map>().map((e) => CreditClient.fromJson(Map<String, dynamic>.from(e))).toList();
+  }
+
   Future<CreditFacturesDetail> loadFactures(String idPersonnes) async {
     final data = await ApiClient.instance.post('credit_factures', fields: {'id_personnes': idPersonnes});
     if (data is! Map) return CreditFacturesDetail(list: [], restant: 0, donnee: 0, totalWithRemise: 0);

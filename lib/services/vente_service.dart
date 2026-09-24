@@ -115,20 +115,30 @@ class VenteService {
   /// "Encaisser" : paiement complet immédiat (`Mob/all_payed`), avec un ou
   /// plusieurs modes de paiement (`VenteMob::allpayed()` a été étendu côté
   /// serveur pour accepter un tableau de paiements plutôt qu'un seul).
+  /// [isReservation] : bouton "Réserver" (voir CartScreen/PaymentScreen) —
+  /// client obligatoire (vérifié par l'appelant), client.is_reservation=1
+  /// côté serveur (VenteMob::addClient()), jusqu'au solde complet de la
+  /// facture (voir ClientManage::payed() côté web, réutilisée par
+  /// Mob::credit_pay()).
   Future<SaleResult> encaisser({
     required List<CartLine> lines,
     required UserModel user,
     required List<PaymentSplit> paiements,
     PersonneModel? client,
     String? reference,
+    bool isReservation = false,
   }) async {
     if (lines.isEmpty) return SaleResult(success: false, message: 'Le panier est vide.');
     if (paiements.isEmpty) return SaleResult(success: false, message: 'Ajoutez au moins un mode de paiement.');
+    if (isReservation && client == null) {
+      return SaleResult(success: false, message: 'Les informations du client sont obligatoires pour une réservation.');
+    }
 
     final fields = <String, String>{
       'cart': jsonEncode(_cartPayload(lines)),
       'user': jsonEncode(user.mobPayload),
       'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
+      'is_reservation': isReservation ? '1' : '0',
     };
     if (client != null) fields['personne'] = jsonEncode({'id': client.id});
     if (reference != null && reference.trim().isNotEmpty) fields['reference'] = reference.trim();

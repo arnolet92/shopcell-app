@@ -117,6 +117,16 @@ class _CartScreenState extends State<CartScreen> {
     if (result == true && mounted) Navigator.of(context).pop(true);
   }
 
+  /// "Réserver" : même écran de validation que l'encaissement, mais en mode
+  /// réservation — client obligatoire, bouton "Valider" (+ "Proforma"),
+  /// client.is_reservation=1 côté serveur (voir PaymentScreen).
+  Future<void> _openReservation() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => PaymentScreen(user: widget.user, isReservation: true)),
+    );
+    if (result == true && mounted) Navigator.of(context).pop(true);
+  }
+
   Future<void> _openEnAttente() async {
     final clients = await VenteService.instance.loadClients();
     if (!mounted) return;
@@ -179,7 +189,7 @@ class _CartScreenState extends State<CartScreen> {
                       },
                     ),
                   ),
-                  _BottomBar(onEncaisser: _openPayment, onEnAttente: _openEnAttente),
+                  _BottomBar(onEncaisser: _openPayment, onEnAttente: _openEnAttente, onReserver: _openReservation),
                 ],
               ),
       ),
@@ -277,9 +287,10 @@ class _CartLineTile extends StatelessWidget {
 }
 
 class _BottomBar extends StatelessWidget {
-  const _BottomBar({required this.onEncaisser, required this.onEnAttente});
+  const _BottomBar({required this.onEncaisser, required this.onEnAttente, required this.onReserver});
   final VoidCallback onEncaisser;
   final VoidCallback onEnAttente;
+  final VoidCallback onReserver;
 
   @override
   Widget build(BuildContext context) {
@@ -319,10 +330,21 @@ class _BottomBar extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: GradientButton(label: 'Encaisser', icon: Icons.check_circle_rounded, onPressed: onEncaisser),
+                  child: OutlinedButton.icon(
+                    onPressed: onReserver,
+                    icon: const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFFA78BFA)),
+                    label: const Text('Réserver', style: TextStyle(color: Color(0xFFA78BFA))),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFA78BFA)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            GradientButton(label: 'Encaisser', icon: Icons.check_circle_rounded, onPressed: onEncaisser),
           ],
         ),
       ),

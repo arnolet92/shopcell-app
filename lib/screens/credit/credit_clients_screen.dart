@@ -21,8 +21,12 @@ String _fmt(double v) {
 /// Liste des clients ayant un solde impayé — miroir mobile de
 /// `Clients/liste_client_credit`.
 class CreditClientsScreen extends StatefulWidget {
-  const CreditClientsScreen({super.key, required this.user});
+  const CreditClientsScreen({super.key, required this.user, this.isReservation = false});
   final UserModel user;
+  /// true : écran "Réservations" (client.is_reservation=1, Mob/reservation_clients)
+  /// au lieu de "Les crédits" — même écran, même flux de paiement (voir
+  /// CreditDetailScreen), seuls le titre/les couleurs/l'endpoint changent.
+  final bool isReservation;
 
   @override
   State<CreditClientsScreen> createState() => _CreditClientsScreenState();
@@ -49,7 +53,7 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
   /// qu'aucun rechargement explicite n'est demandé — mêmes principes que
   /// VenteHomeScreen._load().
   Future<void> _load({bool forceNetwork = false}) async {
-    if (!forceNetwork) {
+    if (!widget.isReservation && !forceNetwork) {
       final cached = AppDataCache.instance.creditClients;
       if (cached != null) {
         setState(() {
@@ -60,9 +64,11 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
       }
     }
     setState(() => _loading = true);
-    final clients = await CreditService.instance.loadClients();
+    final clients = widget.isReservation
+        ? await CreditService.instance.loadReservationClients()
+        : await CreditService.instance.loadClients();
     if (!mounted) return;
-    AppDataCache.instance.setCreditClients(clients);
+    if (!widget.isReservation) AppDataCache.instance.setCreditClients(clients);
     setState(() {
       _clients = clients;
       _loading = false;
@@ -77,7 +83,7 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
 
   Future<void> _openDetail(CreditClient client) async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CreditDetailScreen(client: client, user: widget.user)),
+      MaterialPageRoute(builder: (_) => CreditDetailScreen(client: client, user: widget.user, isReservation: widget.isReservation)),
     );
     if (changed == true) _load();
   }
@@ -86,13 +92,14 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
   Widget build(BuildContext context) {
     final list = _filtered;
     final totalRestant = _clients.fold(0.0, (sum, c) => sum + c.restant);
+    final accent = widget.isReservation ? const Color(0xFFA78BFA) : AppColors.orange;
 
     return Scaffold(
       backgroundColor: AppColors.bgDeep,
       appBar: AppBar(
         backgroundColor: AppColors.bgCard,
         elevation: 0,
-        title: Text('Les crédits', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
+        title: Text(widget.isReservation ? 'Réservations' : 'Les crédits', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 17, color: AppColors.textPrimary)),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -116,7 +123,7 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.account_balance_wallet_rounded, color: AppColors.orange, size: 22),
+                        Icon(widget.isReservation ? Icons.calendar_month_rounded : Icons.account_balance_wallet_rounded, color: accent, size: 22),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -124,7 +131,7 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
                             children: [
                               Text('Total dû (${_clients.length} client${_clients.length > 1 ? 's' : ''})',
                                   style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-                              Text(_fmt(totalRestant), style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.orange)),
+                              Text(_fmt(totalRestant), style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w800, color: accent)),
                             ],
                           ),
                         ),
@@ -143,14 +150,14 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
                                 children: [
                                   const Icon(Icons.check_circle_outline_rounded, size: 42, color: AppColors.green),
                                   const SizedBox(height: 10),
-                                  Text('Aucun crédit en attente', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13)),
+                                  Text(widget.isReservation ? 'Aucune réservation en attente' : 'Aucun crédit en attente', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13)),
                                 ],
                               ),
                             )
                           : ListView.separated(
                               itemCount: list.length,
                               separatorBuilder: (_, index) => const SizedBox(height: 10),
-                              itemBuilder: (context, i) => _CreditClientCard(client: list[i], onTap: () => _openDetail(list[i])),
+                              itemBuilder: (context, i) => _CreditClientCard(client: list[i], accent: accent, onTap: () => _openDetail(list[i])),
                             ),
                 ),
                 const SizedBox(height: 12),
@@ -164,9 +171,10 @@ class _CreditClientsScreenState extends State<CreditClientsScreen> {
 }
 
 class _CreditClientCard extends StatelessWidget {
-  const _CreditClientCard({required this.client, required this.onTap});
+  const _CreditClientCard({required this.client, required this.onTap, this.accent = AppColors.orange});
   final CreditClient client;
   final VoidCallback onTap;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +210,7 @@ class _CreditClientCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(_fmt(client.restant), style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.orange)),
+                  Text(_fmt(client.restant), style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w800, color: accent)),
                   const SizedBox(height: 4),
                   const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
                 ],

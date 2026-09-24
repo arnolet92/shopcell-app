@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../models/payment_split.dart';
 import '../models/receipt_line.dart';
 
 /// Génère le reçu/bon de garantie A4 — calqué sur le modèle papier ShopCell
@@ -78,6 +79,15 @@ class PdfTicketBuilder {
     /// (`lines`) montre l'article remis au client (sortie du stock), pas
     /// celui-ci.
     ReceiptLine? articleRetourne,
+    /// Bouton "Réserver" : filigrane "Reçue" à la place du filigrane normal,
+    /// et le pied de page (garantie/exclusions/signature) est entièrement
+    /// remplacé par le récapitulatif du paiement (total, acompte par type de
+    /// paiement, reste à payer) suivi des conditions de réservation — design
+    /// de reçu, pas de facture. En-tête et tableau des articles inchangés.
+    bool isReservation = false,
+    /// Acomptes versés pour cette réservation, ventilés par type de paiement
+    /// — affichés dans le pied de page (voir isReservation ci-dessus).
+    List<PaymentSplit>? paiements,
   }) async {
     final doc = pw.Document();
 
@@ -123,11 +133,13 @@ class PdfTicketBuilder {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
           theme: theme,
-          buildForeground: (isCopie || isEchange || isProforma)
+          buildForeground: (isCopie || isEchange || isProforma || isReservation)
               ? (context) => pw.Stack(
                     children: [
                       if (isProforma)
                         pw.Positioned.fill(child: _proformaWatermark())
+                      else if (isReservation)
+                        pw.Positioned.fill(child: _reservationWatermark())
                       else if (isEchange)
                         pw.Positioned.fill(child: _echangeWatermark()),
                       if (isCopie) pw.Positioned.fill(child: _copieWatermark()),
@@ -163,7 +175,7 @@ class PdfTicketBuilder {
             _articleRetourneSection(articleRetourne),
           ],
           pw.SizedBox(height: 10),
-          _garantieEtSignature(),
+          isReservation ? _reservationFooter(total: total, paiements: paiements) : _garantieEtSignature(),
         ],
       ),
     );
@@ -217,6 +229,24 @@ class PdfTicketBuilder {
           child: pw.Text(
             'PROFORMA',
             style: pw.TextStyle(fontSize: 80, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey600, letterSpacing: 6),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Filigrane incliné "Reçue" — de bas-gauche vers haut-droite, même
+  /// orientation qu'"Échange"/"PROFORMA", pour le reçu de réservation
+  /// (bouton "Réserver").
+  static pw.Widget _reservationWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: 0.6,
+        child: pw.Opacity(
+          opacity: 0.18,
+          child: pw.Text(
+            'Reçue',
+            style: pw.TextStyle(fontSize: 90, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED), letterSpacing: 6),
           ),
         ),
       ),
@@ -505,6 +535,78 @@ class PdfTicketBuilder {
               pw.Text(_money(total), style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
             ],
           ),
+        ),
+      ],
+    );
+  }
+
+  /// Pied de page du reçu de réservation (bouton "Réserver") : récapitulatif
+  /// du paiement (total, acompte par type de paiement, reste à payer) puis
+  /// les conditions de réservation — remplace entièrement la garantie/les
+  /// exclusions/la signature d'une facture normale. En-tête et tableau des
+  /// articles restent ceux d'une facture classique (voir buildSaleReceiptA4).
+  static pw.Widget _reservationFooter({required double total, List<PaymentSplit>? paiements}) {
+    const small = pw.TextStyle(fontSize: 8);
+    const smallBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+    final splits = paiements ?? const <PaymentSplit>[];
+    final acompte = splits.fold(0.0, (sum, p) => sum + p.montant);
+    final reste = total - acompte;
+
+    pw.Widget row(String label, String value, {bool bold = false, PdfColor? color}) => pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 2),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(label, style: pw.TextStyle(fontSize: 9.5, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
+              pw.Text(value, style: pw.TextStyle(fontSize: 9.5, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
+            ],
+          ),
+        );
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(width: 0.6, color: PdfColor.fromInt(0xFF7C3AED)),
+            borderRadius: pw.BorderRadius.circular(4),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('RÉCAPITULATIF DU PAIEMENT', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED))),
+              pw.SizedBox(height: 6),
+              row('Total', _money(total)),
+              if (splits.isEmpty)
+                row('Acompte versé', _money(acompte))
+              else
+                for (final p in splits) row('Acompte (${p.typeLabel})', _money(p.montant)),
+              pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 3), child: pw.Divider(height: 1, thickness: 0.5)),
+              row('Reste à payer', _money(reste > 0 ? reste : 0), bold: true, color: reste > 0 ? PdfColors.red : PdfColors.green800),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 12),
+        pw.Text('CONDITIONS DE RÉSERVATION', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
+        pw.SizedBox(height: 6),
+        pw.Text('1. Réservation avec délai de 7 jours', style: smallBold),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          "La réservation est valable pour une durée maximale de 7 jours à compter de la date du versement de l'acompte. "
+          "En cas d'annulation par le client avant l'expiration des 7 jours, une retenue de 10 % de la valeur totale du téléphone sera appliquée. "
+          "Le solde éventuel de l'acompte pourra être remboursé. "
+          "Au-delà du délai de 7 jours, la réservation sera automatiquement annulée et la totalité de l'acompte versé sera non remboursable.",
+          style: small,
+        ),
+        pw.SizedBox(height: 8),
+        pw.Text('2. Réservation sans limite de date', style: smallBold),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          "Pour une réservation sans limite de date, le client devra choisir un téléphone disponible dont la valeur correspond au montant total de l'acompte versé. "
+          "L'acompte versé est non remboursable en aucun cas. Il pourra uniquement être utilisé pour l'acquisition d'un téléphone disponible correspondant au montant versé.",
+          style: small,
         ),
       ],
     );
