@@ -578,13 +578,20 @@ class PdfTicketBuilder {
             children: [
               pw.Text('RÉCAPITULATIF DU PAIEMENT', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED))),
               pw.SizedBox(height: 6),
-              row('Total', _money(total)),
-              if (splits.isEmpty)
-                row('Acompte versé', _money(acompte))
-              else
-                for (final p in splits) row('Acompte (${p.typeLabel})', _money(p.montant)),
-              pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 3), child: pw.Divider(height: 1, thickness: 0.5)),
-              row('Reste à payer', _money(reste > 0 ? reste : 0), bold: true, color: reste > 0 ? PdfColors.red : PdfColors.green800),
+              // Paiement total, sans reste : comme un encaissement normal, on
+              // n'affiche que le montant total (pas d'acomptes ni de reste à
+              // zéro qui n'apportent plus d'information utile).
+              if (reste <= 0)
+                row('Total', _money(total), bold: true)
+              else ...[
+                row('Total', _money(total)),
+                if (splits.isEmpty)
+                  row('Acompte versé', _money(acompte))
+                else
+                  for (final p in splits) row('Acompte (${p.typeLabel})', _money(p.montant)),
+                pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 3), child: pw.Divider(height: 1, thickness: 0.5)),
+                row('Reste à payer', _money(reste), bold: true, color: PdfColors.red),
+              ],
             ],
           ),
         ),

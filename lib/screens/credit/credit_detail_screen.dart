@@ -49,7 +49,7 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
   final _sommeCtrl = TextEditingController();
 
   bool _submitting = false;
-  bool _printingRecu = false;
+  String? _printingFactureId;
   String? _error;
   bool _changed = false;
 
@@ -136,26 +136,24 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
     }
   }
 
-  /// Réservations uniquement : imprime/partage le reçu (ticket ou A4, avec
-  /// filigrane "Reçue" et conditions de réservation — voir
-  /// ReceiptPrintService/PdfTicketBuilder) de la facture de réservation, avec
-  /// les acomptes déjà versés par type. S'appuie sur la première facture
-  /// impayée du client (en pratique, une réservation ne correspond qu'à une
-  /// seule facture).
-  Future<void> _imprimerRecu() async {
-    final detail = _detail;
-    if (detail == null || detail.list.isEmpty || _printingRecu) return;
-    setState(() => _printingRecu = true);
-    final facture = detail.list.first;
+  /// Réservations uniquement : imprime/partage le reçu (ticket ou A4) de
+  /// CETTE facture précisément — comme un encaissement normal si elle est
+  /// entièrement soldée (total seul), ou avec les acomptes déjà versés (par
+  /// type, propres à cette facture) et le reste à payer sinon (voir
+  /// ReceiptPrintService/PdfTicketBuilder). Utilisé pour le bouton "Imprimer
+  /// reçu" et automatiquement après un paiement réussi.
+  Future<void> _printReservationFacture(CreditFacture facture) async {
+    if (_printingFactureId != null) return;
+    setState(() => _printingFactureId = facture.idClient);
     final factureDetail = await FactureService.instance.loadDetail(facture.idClient);
     if (!mounted) return;
     final lines = [...factureDetail.actifs, ...factureDetail.offerts].map(ReceiptLine.fromFactureArticle).toList();
     if (lines.isEmpty) {
-      setState(() => _printingRecu = false);
+      setState(() => _printingFactureId = null);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Aucun article trouvé pour cette réservation.')));
       return;
     }
-    final paiements = detail.paiements
+    final paiements = facture.paiements
         .map((p) => PaymentSplit(idTypePaiement: p.nomTypePaiement, typeLabel: p.nomTypePaiement, montant: p.donnee))
         .toList();
     final message = await ReceiptPrintService.instance.offerPrint(
@@ -172,10 +170,36 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
       isReservation: true,
     );
     if (!mounted) return;
-    setState(() => _printingRecu = false);
+    setState(() => _printingFactureId = null);
     if (message.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  /// Paiement d'UNE facture de réservation précise (voir _ReservationFactureCard
+  /// ci-dessous) — jamais mélangé avec une autre facture de la même personne.
+  /// Recharge la liste puis propose immédiatement l'impression du reçu, comme
+  /// après un encaissement normal. Retourne un message d'erreur (affiché
+  /// dans la carte) ou null si tout s'est bien passé.
+  Future<String?> _payerFacture(CreditFacture facture, String idTypePaiement, double somme) async {
+    final result = await CreditService.instance.payerFacture(
+      idClient: facture.idClient,
+      idTypePaiement: idTypePaiement,
+      sommeDonnee: somme,
+      user: widget.user,
+    );
+    if (!mounted) return result.message;
+    if (!result.success) return result.message ?? 'Le paiement a échoué.';
+
+    _changed = true;
+    AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
+    await _load();
+    if (!mounted) return null;
+
+    final updated = _detail?.list.where((f) => f.idClient == facture.idClient);
+    final factureAImprimer = (updated != null && updated.isNotEmpty) ? updated.first : facture;
+    await _printReservationFacture(factureAImprimer);
+    return null;
   }
 
   @override
@@ -206,37 +230,38 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _clientCard(),
-                      if (widget.isReservation && detail != null && detail.list.isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        OutlinedButton.icon(
-                          onPressed: _printingRecu ? null : _imprimerRecu,
-                          icon: _printingRecu
-                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)))
-                              : const Icon(Icons.print_rounded, size: 17, color: Color(0xFFA78BFA)),
-                          label: const Text('Imprimer reçu', style: TextStyle(color: Color(0xFFA78BFA))),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFFA78BFA)),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            minimumSize: const Size(double.infinity, 0),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 20),
-                      if (widget.isReservation && detail != null && detail.paiements.isNotEmpty) ...[
-                        _paiementsEffectuesSection(detail),
-                        const SizedBox(height: 20),
-                      ],
-                      Text('Factures impayées', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+                      Text(
+                        widget.isReservation ? 'Réservations' : 'Factures impayées',
+                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                      ),
                       const SizedBox(height: 8),
                       if (detail == null || detail.list.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Center(child: Text('Aucune facture impayée', style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13))),
+                          child: Center(
+                            child: Text(
+                              widget.isReservation ? 'Aucune réservation' : 'Aucune facture impayée',
+                              style: GoogleFonts.inter(color: AppColors.textMuted, fontSize: 13),
+                            ),
+                          ),
                         )
+                      else if (widget.isReservation)
+                        // Chaque réservation est une facture indépendante : son propre
+                        // récapitulatif de paiements, son propre formulaire de paiement et
+                        // son propre bouton d'impression — jamais mélangée avec une autre
+                        // facture du même client ("le paiement est par facture, pas mélangé").
+                        ...detail.list.map((f) => _ReservationFactureCard(
+                              key: ValueKey(f.idClient),
+                              facture: f,
+                              typesPaiement: _typesPaiement,
+                              printing: _printingFactureId == f.idClient,
+                              onPrint: () => _printReservationFacture(f),
+                              onPayer: (idTypePaiement, somme) => _payerFacture(f, idTypePaiement, somme),
+                            ))
                       else
                         ...detail.list.map(_factureTile),
-                      if (detail != null && detail.restant > 0) ...[
+                      if (!widget.isReservation && detail != null && detail.restant > 0) ...[
                         const SizedBox(height: 22),
                         _paiementSection(detail),
                       ],
@@ -245,31 +270,6 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
                 ),
         ),
       ),
-    );
-  }
-
-  /// Réservations : les acomptes déjà versés, ventilés par type de paiement.
-  Widget _paiementsEffectuesSection(CreditFacturesDetail detail) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Paiements déjà effectués', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: detail.paiements
-              .map((p) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(p.nomTypePaiement, style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textMuted)),
-                      Text(_fmt(p.donnee), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                    ]),
-                  ))
-              .toList(),
-        ),
-      ],
     );
   }
 
@@ -458,6 +458,183 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
         const SizedBox(height: 20),
         GradientButton(label: 'Encaisser', icon: Icons.check_circle_rounded, loading: _submitting, onPressed: _confirmAndPayer),
       ],
+    );
+  }
+}
+
+/// Carte d'une facture de réservation, autonome : ses propres acomptes déjà
+/// versés (par type), son propre formulaire de paiement (si non soldée) et
+/// son propre bouton d'impression — jamais de champ ou de paiement partagé
+/// avec une autre facture du même client.
+class _ReservationFactureCard extends StatefulWidget {
+  const _ReservationFactureCard({
+    super.key,
+    required this.facture,
+    required this.typesPaiement,
+    required this.printing,
+    required this.onPrint,
+    required this.onPayer,
+  });
+
+  final CreditFacture facture;
+  final List<LookupItem> typesPaiement;
+  final bool printing;
+  final VoidCallback onPrint;
+  final Future<String?> Function(String idTypePaiement, double somme) onPayer;
+
+  @override
+  State<_ReservationFactureCard> createState() => _ReservationFactureCardState();
+}
+
+class _ReservationFactureCardState extends State<_ReservationFactureCard> {
+  String? _selectedTypePaiementId;
+  final _sommeCtrl = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.typesPaiement.isNotEmpty) _selectedTypePaiementId = widget.typesPaiement.first.id;
+    if (widget.facture.restant > 0) _sommeCtrl.text = widget.facture.restant.toStringAsFixed(0);
+  }
+
+  @override
+  void dispose() {
+    _sommeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final somme = double.tryParse(_sommeCtrl.text.replaceAll(' ', ''));
+    if (somme == null || somme <= 0) {
+      setState(() => _error = 'Entrez une somme donnée valide.');
+      return;
+    }
+    if (_selectedTypePaiementId == null) {
+      setState(() => _error = 'Choisissez un mode de paiement.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final err = await widget.onPayer(_selectedTypePaiementId!, somme);
+    if (!mounted) return;
+    setState(() {
+      _submitting = false;
+      _error = err;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = widget.facture;
+    final soldee = f.restant <= 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(f.numeroFacture ?? 'Facture', style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    if (f.dateVentes != null)
+                      Text(f.dateVentes!, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: widget.printing ? null : widget.onPrint,
+                tooltip: 'Imprimer reçu',
+                icon: widget.printing
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)))
+                    : const Icon(Icons.print_rounded, color: Color(0xFFA78BFA)),
+              ),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Montant', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+              Text(_fmt(f.montant), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            ],
+          ),
+          if (f.paiements.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: f.paiements
+                  .map((p) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: AppColors.bgElevated, borderRadius: BorderRadius.circular(8)),
+                        child: Text('${p.nomTypePaiement}: ${_fmt(p.donnee)}', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                      ))
+                  .toList(),
+            ),
+          ],
+          const SizedBox(height: 10),
+          if (soldee)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 15, color: AppColors.green),
+                  const SizedBox(width: 6),
+                  Text('Soldée', style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.green)),
+                ],
+              ),
+            )
+          else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Reste à payer', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                Text(_fmt(f.restant), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.orange)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (widget.typesPaiement.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: widget.typesPaiement.map((t) {
+                  final selected = t.id == _selectedTypePaiementId;
+                  return ChoiceChip(
+                    label: Text(t.label, style: TextStyle(fontSize: 11.5, color: selected ? Colors.white : AppColors.textSecondary)),
+                    selected: selected,
+                    selectedColor: AppColors.accent,
+                    backgroundColor: AppColors.bgElevated,
+                    onSelected: (_) => setState(() => _selectedTypePaiementId = t.id),
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 10),
+            InlineField(
+              label: 'Somme donnée (Ar)',
+              controller: _sommeCtrl,
+              prefixIcon: Icons.payments_rounded,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12)),
+            ],
+            const SizedBox(height: 12),
+            GradientButton(label: 'Payer', icon: Icons.check_circle_rounded, loading: _submitting, onPressed: _submit),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -63,6 +63,7 @@ class CreditFacture {
     required this.montant,
     required this.donnee,
     required this.restant,
+    this.paiements = const [],
   });
 
   final String idClient;
@@ -71,9 +72,16 @@ class CreditFacture {
   final double montant;
   final double donnee;
   final double restant;
+  /// Paiements déjà effectués sur CETTE facture uniquement, ventilés par
+  /// type — jamais mélangés avec ceux d'une autre facture de la même
+  /// personne (voir Mob::credit_factures()).
+  final List<CreditPaiementLigne> paiements;
 
   factory CreditFacture.fromJson(Map<String, dynamic> j) {
     double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+    final paiements = (j['paiements'] is List)
+        ? (j['paiements'] as List).whereType<Map>().map((e) => CreditPaiementLigne.fromJson(Map<String, dynamic>.from(e))).toList()
+        : <CreditPaiementLigne>[];
     return CreditFacture(
       idClient: '${j['id_client'] ?? ''}',
       numeroFacture: j['numero_facture']?.toString(),
@@ -81,6 +89,7 @@ class CreditFacture {
       montant: d(j['montant']),
       donnee: d(j['donnee']),
       restant: d(j['restant']),
+      paiements: paiements,
     );
   }
 }
@@ -164,6 +173,29 @@ class CreditService {
   }) async {
     final data = await ApiClient.instance.post('credit_pay', fields: {
       'id_personnes': idPersonnes,
+      'id_type_paiement': idTypePaiement,
+      'somme_donnee': sommeDonnee.toString(),
+      'user': jsonEncode(user.mobPayload),
+    });
+    if (data is! Map) return CreditResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return CreditResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? 'Le paiement a échoué.' : 'Paiement enregistré avec succès.'),
+    );
+  }
+
+  /// Paiement d'UNE seule facture (écran "Réservations") — ne règle jamais
+  /// une autre facture de la même personne, contrairement à payer() ci-dessus
+  /// (voir Mob::reservation_pay_facture()/ClientManage::payerUneFacture()).
+  Future<CreditResult> payerFacture({
+    required String idClient,
+    required String idTypePaiement,
+    required double sommeDonnee,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('reservation_pay_facture', fields: {
+      'id_client': idClient,
       'id_type_paiement': idTypePaiement,
       'somme_donnee': sommeDonnee.toString(),
       'user': jsonEncode(user.mobPayload),
