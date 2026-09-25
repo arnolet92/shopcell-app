@@ -255,13 +255,11 @@ class PdfTicketBuilder {
 
   /// Encadré "Article retourné" (échange uniquement) — affiche l'article
   /// repris au client (retourné en stock) séparément de la ligne principale
-  /// du tableau, qui montre l'article remis (sortie du stock).
+  /// du tableau, qui montre l'article remis (sortie du stock). Volontairement
+  /// réduit à la désignation + la capacité (mémoire) : les autres détails
+  /// (n° série, IMEI, modèle) ne sont pas pertinents pour cet article repris.
   static pw.Widget _articleRetourneSection(ReceiptLine article) {
     final details = <String>[];
-    if ((article.numSerie ?? '').trim().isNotEmpty) details.add('N° série: ${article.numSerie}');
-    if ((article.imei1 ?? '').trim().isNotEmpty) details.add('IMEI1: ${article.imei1}');
-    if ((article.imei2 ?? '').trim().isNotEmpty) details.add('IMEI2: ${article.imei2}');
-    if ((article.nomModel ?? '').trim().isNotEmpty) details.add('Modèle: ${article.nomModel}');
     if ((article.nomMarque ?? '').trim().isNotEmpty) details.add('Capacité: ${article.nomMarque}');
 
     return pw.Container(
