@@ -188,7 +188,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           InlineField(
-            label: 'Lien du serveur (ex: http://192.168.1.10/shopcell)',
+            label: 'Adresse du serveur (ex: 192.168.1.10/shopcell ou https://91.234.194.155/shopcell)',
             controller: _manualLinkController,
             prefixIcon: Icons.link_rounded,
             keyboardType: TextInputType.url,

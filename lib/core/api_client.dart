@@ -28,14 +28,32 @@ class ApiClient {
 
   String? _baseUrl;
 
+  /// Hôtes auxquels on autorise un certificat HTTPS invalide/non
+  /// correspondant (voir `ShopCellHttpOverrides`) : le serveur actuellement
+  /// mémorisé, plus tout hôte en cours de test via `overrideBaseUrl` lors
+  /// d'un jumelage (`ServerService.pairWithLink`) — jamais un hôte que
+  /// l'utilisateur n'a pas lui-même saisi ou scanné.
+  final Set<String> _trustedHosts = {};
+
+  bool isTrustedHost(String? host) => host != null && _trustedHosts.contains(host);
+
+  void _rememberTrustedHost(String url) {
+    final host = Uri.tryParse(url)?.host;
+    if (host != null && host.isNotEmpty) _trustedHosts.add(host);
+  }
+
   Future<String?> get baseUrl async {
-    _baseUrl ??= await LocalDb.instance.getConfig(LocalDb.keyServerUrl);
+    if (_baseUrl == null) {
+      _baseUrl = await LocalDb.instance.getConfig(LocalDb.keyServerUrl);
+      if (_baseUrl != null) _rememberTrustedHost(_baseUrl!);
+    }
     return _baseUrl;
   }
 
   Future<void> setBaseUrl(String url) async {
     final cleaned = url.trim().replaceAll(RegExp(r'/+$'), '');
     _baseUrl = cleaned;
+    _rememberTrustedHost(cleaned);
     await LocalDb.instance.setConfig(LocalDb.keyServerUrl, cleaned);
   }
 
@@ -58,6 +76,7 @@ class ApiClient {
     if (base == null) {
       throw ApiException('Aucun serveur configuré. Veuillez scanner le QR code.');
     }
+    if (overrideBaseUrl != null) _rememberTrustedHost(overrideBaseUrl);
     final uri = _uri(base, 'Mob/$path');
     try {
       final response = await http.post(uri, body: fields ?? const {}).timeout(timeout);
@@ -109,6 +128,7 @@ class ApiClient {
     if (base == null) {
       throw ApiException('Aucun serveur configuré. Veuillez scanner le QR code.');
     }
+    if (overrideBaseUrl != null) _rememberTrustedHost(overrideBaseUrl);
     final uri = _uri(base, 'Mob/$path').replace(queryParameters: query);
     try {
       final response = await http.get(uri).timeout(timeout);

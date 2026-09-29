@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import 'core/http_overrides.dart';
 import 'core/theme.dart';
 import 'screens/splash/splash_screen.dart';
 
 void main() {
+  HttpOverrides.global = ShopCellHttpOverrides();
   runApp(const ShopCellApp());
 }
 
