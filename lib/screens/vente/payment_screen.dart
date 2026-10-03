@@ -72,7 +72,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void initState() {
     super.initState();
-    _montantCtrl.text = _total.toStringAsFixed(0);
+    // Une réservation est un acompte, presque toujours inférieur au total —
+    // préremplir avec le total (comme pour un encaissement classique) amenait
+    // à valider par erreur une réservation payée intégralement dès la
+    // création (bouton "Réserver" cliqué sans modifier le montant), qui
+    // redevient alors immédiatement une vente normale et disparaît de la
+    // liste des réservations. On force donc une saisie explicite du montant.
+    if (!widget.isReservation) {
+      _montantCtrl.text = _total.toStringAsFixed(0);
+    }
     _loadRefs();
   }
 
@@ -189,6 +197,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
   double get _effectiveSum => _effectiveSplits.fold(0.0, (sum, s) => sum + s.montant);
 
   Future<void> _confirmAndValidate() async {
+    // Le champ montant est laissé vide pour une réservation (voir initState)
+    // afin de forcer une saisie explicite de l'acompte : _effectiveSplits
+    // retombe sinon sur le total intégral, ce qui validerait silencieusement
+    // une réservation payée en totalité (elle redevient alors une vente
+    // normale et disparaît de la liste des réservations).
+    if (widget.isReservation && _splits.isEmpty) {
+      final saisie = double.tryParse(_montantCtrl.text.replaceAll(' ', ''));
+      if (saisie == null || saisie <= 0) {
+        setState(() => _error = "Entrez le montant de l'acompte versé par le client.");
+        return;
+      }
+    }
     final splits = _effectiveSplits;
     if (splits.isEmpty) {
       setState(() => _error = 'Choisissez un mode de paiement.');
@@ -453,7 +473,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   Expanded(
                     child: InlineField(
-                      label: _isEspeces ? 'Somme donnée (Ar)' : 'Montant (Ar)',
+                      label: widget.isReservation
+                          ? 'Acompte versé (Ar)'
+                          : (_isEspeces ? 'Somme donnée (Ar)' : 'Montant (Ar)'),
                       controller: _montantCtrl,
                       prefixIcon: Icons.payments_rounded,
                       keyboardType: TextInputType.number,
