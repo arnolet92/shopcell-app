@@ -67,6 +67,13 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   final _montantCtrl = TextEditingController();
   final List<PaymentSplit> _splits = [];
 
+  // Coordonnées client, obligatoires uniquement pour "Réserver l'échange"
+  // (reste > 0) — pré-remplies avec celles déjà connues de la facture.
+  final _resaNomCtrl = TextEditingController();
+  final _resaPrenomCtrl = TextEditingController();
+  final _resaTelephoneCtrl = TextEditingController();
+  final _resaCinCtrl = TextEditingController();
+
   bool _submitting = false;
   bool _proformaSubmitting = false;
   String? _error;
@@ -91,6 +98,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     _motifCtrl.dispose();
     _batterieCtrl.dispose();
     _montantCtrl.dispose();
+    _resaNomCtrl.dispose();
+    _resaPrenomCtrl.dispose();
+    _resaTelephoneCtrl.dispose();
+    _resaCinCtrl.dispose();
     _debounceProduit?.cancel();
     _debouncePrix?.cancel();
     super.dispose();
@@ -119,6 +130,12 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     final prixVentesOrigine = ligne?['prix_ventes'];
     final prixActuelDefault = prixVentesOrigine is num ? prixVentesOrigine.toDouble() : double.tryParse('$prixVentesOrigine') ?? 0;
     _prixVenteCtrl.text = prixActuelDefault.toStringAsFixed(0);
+
+    final entete = facture?['entete'] as Map<String, dynamic>?;
+    _resaNomCtrl.text = entete?['nom_complet']?.toString() ?? '';
+    _resaPrenomCtrl.text = entete?['prenom_personnes']?.toString() ?? '';
+    _resaTelephoneCtrl.text = entete?['telephone']?.toString() ?? '';
+    _resaCinCtrl.text = entete?['cin_personnes']?.toString() ?? '';
   }
 
   Map<String, dynamic>? get _entete => _facture?['entete'] as Map<String, dynamic>?;
@@ -192,6 +209,16 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   }
 
   double get _splitsSum => _splits.fold(0.0, (sum, s) => sum + s.montant);
+
+  /// true si le supplément est payé en totalité (bouton "Valider l'échange"
+  /// possible) ; sinon seul "Réservez l'échange" est proposé (aucun
+  /// mouvement de stock, coordonnées client obligatoires).
+  bool get _sommeComplete {
+    final rec = _recap;
+    if (rec == null || rec.error) return false;
+    final sum = _splits.isNotEmpty ? _splitsSum : (double.tryParse(_montantCtrl.text.replaceAll(' ', '')) ?? 0);
+    return sum >= rec.reste;
+  }
 
   List<PaymentSplit> get _effectiveSplits {
     if (_splits.isNotEmpty) return _splits;
@@ -353,6 +380,80 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     }
   }
 
+  /// "Réservez l'échange" : le supplément n'est payé que partiellement —
+  /// aucun mouvement de stock, coordonnées client obligatoires.
+  Future<void> _confirmAndReserver() async {
+    final produit = _selectedProduit;
+    final rec = _recap;
+    if (produit == null || rec == null || rec.error) {
+      setState(() => _error = 'Choisissez un article de remplacement.');
+      return;
+    }
+    if (_isDefaut && _motifCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Le motif de réparation est obligatoire.');
+      return;
+    }
+    if (_resaNomCtrl.text.trim().isEmpty ||
+        _resaPrenomCtrl.text.trim().isEmpty ||
+        _resaTelephoneCtrl.text.trim().isEmpty ||
+        _resaCinCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Le nom, le prénom, le téléphone et le CIN du client sont obligatoires pour réserver cet échange.');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Réserver cet échange ?', style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(
+          '${rec.oldDesignation} → ${rec.newDesignation}\nAucun article ne bouge en stock pour l\'instant : les deux sont seulement verrouillés jusqu\'au paiement complet du supplément (${_fmt(rec.reste)}).',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Réserver', style: TextStyle(color: Color(0xFFA78BFA)))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final prixVente = rec.newPrixUnitaire;
+    final prixActuelRepris = double.tryParse(_prixVenteCtrl.text.replaceAll(' ', '')) ?? 0;
+    final result = await EchangeService.instance.reserver(
+      idVentes: widget.idVentes,
+      newProduitsId: produit.idProduits,
+      prixVente: prixVente,
+      prixActuelRepris: prixActuelRepris,
+      isDefaut: _isDefaut,
+      motifReparation: _isDefaut ? _motifCtrl.text : null,
+      batterie: _isDefaut ? _batterieCtrl.text : null,
+      user: widget.user,
+      paiements: _effectiveSplits,
+      nonUpgrade: _nonUpgrade,
+      nomComplet: _resaNomCtrl.text,
+      prenom: _resaPrenomCtrl.text,
+      telephone: _resaTelephoneCtrl.text,
+      cin: _resaCinCtrl.text,
+    );
+    if (!mounted) return;
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message ?? 'Échange réservé avec succès.')),
+      );
+    } else {
+      setState(() {
+        _submitting = false;
+        _error = result.message;
+      });
+    }
+  }
+
   /// Devis non fiscal : imprime/partage le même contenu que le ticket
   /// d'échange, filigrane "PROFORMA" à la place — sans valider l'échange (le
   /// stock n'est pas mouvementé, rien n'est enregistré côté serveur).
@@ -497,6 +598,10 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                             const SizedBox(height: 18),
                             _paiementSection(),
                           ],
+                          if (_recap != null && !_recap!.error && !_sommeComplete) ...[
+                            const SizedBox(height: 18),
+                            _reservationClientSection(),
+                          ],
                           if (_error != null) ...[
                             const SizedBox(height: 14),
                             Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
@@ -518,12 +623,20 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          GradientButton(
-                            label: "Valider l'échange",
-                            icon: Icons.swap_horizontal_circle_rounded,
-                            loading: _submitting,
-                            onPressed: (_recap != null && !_recap!.error) ? _confirmAndValider : null,
-                          ),
+                          if (_sommeComplete)
+                            GradientButton(
+                              label: "Valider l'échange",
+                              icon: Icons.swap_horizontal_circle_rounded,
+                              loading: _submitting,
+                              onPressed: (_recap != null && !_recap!.error) ? _confirmAndValider : null,
+                            )
+                          else
+                            GradientButton(
+                              label: "Réservez l'échange",
+                              icon: Icons.calendar_month_rounded,
+                              loading: _submitting,
+                              onPressed: (_recap != null && !_recap!.error) ? _confirmAndReserver : null,
+                            ),
                         ],
                       ],
                     ),
@@ -759,6 +872,43 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         Text(label, style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary)),
         Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: color ?? AppColors.textPrimary)),
       ],
+    );
+  }
+
+  /// Coordonnées client, obligatoires pour "Réservez l'échange" (reste > 0).
+  Widget _reservationClientSection() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1030),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFA78BFA).withValues(alpha: .35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calendar_month_rounded, size: 16, color: Color(0xFFA78BFA)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Coordonnées client (obligatoires pour réserver)',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFFC4B5FD)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          InlineField(label: 'Nom complet', controller: _resaNomCtrl, prefixIcon: Icons.person_outline_rounded),
+          const SizedBox(height: 10),
+          InlineField(label: 'Prénom', controller: _resaPrenomCtrl, prefixIcon: Icons.person_outline_rounded),
+          const SizedBox(height: 10),
+          InlineField(label: 'Téléphone', controller: _resaTelephoneCtrl, prefixIcon: Icons.phone_rounded, keyboardType: TextInputType.phone),
+          const SizedBox(height: 10),
+          InlineField(label: 'N° CIN', controller: _resaCinCtrl, prefixIcon: Icons.badge_outlined),
+        ],
+      ),
     );
   }
 

@@ -22,6 +22,7 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.inventory_2_rounded, label: "Gestion d'article"),
   SidebarItemData(icon: Icons.travel_explore_rounded, label: 'Recherche'),
   SidebarItemData(icon: Icons.swap_horizontal_circle_rounded, label: 'Faire un échange'),
+  SidebarItemData(icon: Icons.calendar_month_rounded, label: 'Échanges en réservation'),
   SidebarItemData(icon: Icons.account_balance_wallet_rounded, label: 'Les crédits'),
   SidebarItemData(icon: Icons.calendar_month_rounded, label: 'Réservations'),
   SidebarItemData(icon: Icons.receipt_long_rounded, label: 'Factures payées'),

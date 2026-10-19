@@ -179,6 +179,85 @@ class EchangeHistoItem {
   }
 }
 
+/// Un échange "en réservation" (`Mob/echange_reservation_list`) : le
+/// supplément n'est payé que partiellement — aucun mouvement de stock n'a
+/// encore eu lieu, les deux articles sont juste verrouillés côté serveur
+/// jusqu'à validation ou annulation. Miroir mobile de l'onglet web
+/// "Échanges en réservation" (`Echange::reservation_pending()`).
+class EchangeReservationItem {
+  EchangeReservationItem({
+    required this.idEchangeReservation,
+    required this.clientNomComplet,
+    required this.clientPrenom,
+    required this.clientCin,
+    required this.clientTelephone,
+    required this.oldDesignation,
+    required this.oldNumSerie,
+    required this.oldImei1,
+    required this.oldImei2,
+    required this.newDesignation,
+    required this.newNumSerie,
+    required this.newImei1,
+    required this.newImei2,
+    required this.montantFinal,
+    required this.prixAjoute,
+    required this.paye,
+    required this.reste,
+    required this.reservationAt,
+    required this.numeroFacture,
+  });
+
+  final String idEchangeReservation;
+  final String? clientNomComplet;
+  final String? clientPrenom;
+  final String? clientCin;
+  final String? clientTelephone;
+  final String oldDesignation;
+  final String? oldNumSerie;
+  final String? oldImei1;
+  final String? oldImei2;
+  final String newDesignation;
+  final String? newNumSerie;
+  final String? newImei1;
+  final String? newImei2;
+  final double montantFinal;
+  final double prixAjoute;
+  final double paye;
+  final double reste;
+  final String? reservationAt;
+  final String? numeroFacture;
+
+  factory EchangeReservationItem.fromJson(Map<String, dynamic> j) {
+    double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+    String? s(dynamic v) {
+      final t = v?.toString().trim();
+      return (t == null || t.isEmpty) ? null : t;
+    }
+
+    return EchangeReservationItem(
+      idEchangeReservation: '${j['id_echange_reservation'] ?? ''}',
+      clientNomComplet: s(j['client_nom_complet']),
+      clientPrenom: s(j['client_prenom']),
+      clientCin: s(j['client_cin']),
+      clientTelephone: s(j['client_telephone']),
+      oldDesignation: s(j['old_designation']) ?? '-',
+      oldNumSerie: s(j['old_num_serie']),
+      oldImei1: s(j['old_imei1']),
+      oldImei2: s(j['old_imei2']),
+      newDesignation: s(j['new_designation']) ?? '-',
+      newNumSerie: s(j['new_num_serie']),
+      newImei1: s(j['new_imei1']),
+      newImei2: s(j['new_imei2']),
+      montantFinal: d(j['montant_final']),
+      prixAjoute: d(j['prix_ajoute']),
+      paye: d(j['paye']),
+      reste: d(j['reste']),
+      reservationAt: s(j['reservation_at']),
+      numeroFacture: s(j['numero_facture_echange']),
+    );
+  }
+}
+
 class EchangeService {
   EchangeService._();
   static final EchangeService instance = EchangeService._();
@@ -345,6 +424,127 @@ class EchangeService {
     return EchangeResult(
       success: !error,
       message: data['msg']?.toString() ?? (error ? "L'échange a échoué." : 'Échange validé avec succès.'),
+    );
+  }
+
+  /// "Réservez l'échange" : même principe que valider(), mais quand le
+  /// supplément n'est payé que partiellement — aucun mouvement de stock,
+  /// coordonnées client obligatoires (nom/prénom/téléphone/CIN).
+  Future<EchangeResult> reserver({
+    required String idVentes,
+    required String newProduitsId,
+    required double prixVente,
+    double? prixActuelRepris,
+    required bool isDefaut,
+    String? motifReparation,
+    String? batterie,
+    required UserModel user,
+    required List<PaymentSplit> paiements,
+    bool nonUpgrade = false,
+    required String nomComplet,
+    required String prenom,
+    required String telephone,
+    required String cin,
+  }) async {
+    if (isDefaut && (motifReparation == null || motifReparation.trim().isEmpty)) {
+      return EchangeResult(success: false, message: 'Le motif de réparation est obligatoire pour un article retourné avec défaut.');
+    }
+    if (nomComplet.trim().isEmpty || prenom.trim().isEmpty || telephone.trim().isEmpty || cin.trim().isEmpty) {
+      return EchangeResult(success: false, message: 'Le nom, le prénom, le téléphone et le CIN du client sont obligatoires pour réserver cet échange.');
+    }
+    final fields = <String, String>{
+      'id_ventes': idVentes,
+      'new_produits_id': newProduitsId,
+      'prix_vente': prixVente.toString(),
+      'isdefaut': isDefaut ? '1' : '0',
+      'non_upgrade': nonUpgrade ? '1' : '0',
+      'user': jsonEncode(user.mobPayload),
+      'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
+      'nom_complet': nomComplet.trim(),
+      'prenom_personnes': prenom.trim(),
+      'telephone': telephone.trim(),
+      'cin_personnes': cin.trim(),
+    };
+    if (prixActuelRepris != null) fields['prix_actuel_repris'] = prixActuelRepris.toString();
+    if (motifReparation != null && motifReparation.trim().isNotEmpty) {
+      fields['motif_reparation'] = motifReparation.trim();
+    }
+    if (batterie != null && batterie.trim().isNotEmpty) {
+      fields['batterie'] = batterie.trim();
+    }
+    final data = await ApiClient.instance.post('echange_reserver', fields: fields);
+    if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? "La réservation a échoué." : 'Échange réservé avec succès.'),
+    );
+  }
+
+  /// Liste des échanges en réservation (ni validés, ni annulés) — écran
+  /// mobile "Échanges en réservation".
+  Future<List<EchangeReservationItem>> loadPendingReservations({String? arg}) async {
+    final data = await ApiClient.instance.post('echange_reservation_list', fields: {
+      if (arg != null && arg.trim().isNotEmpty) 'arg': arg.trim(),
+    });
+    if (data is! List) return [];
+    return data.whereType<Map>().map((e) => EchangeReservationItem.fromJson(Map<String, dynamic>.from(e))).toList();
+  }
+
+  /// Ajoute un paiement à une réservation déjà créée, sans la valider.
+  Future<EchangeResult> payerReservation({
+    required String idEchangeReservation,
+    required double somme,
+    required String idTypePaiement,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('echange_payer_reservation', fields: {
+      'id_echange_reservation': idEchangeReservation,
+      'somme_donnee': somme.toString(),
+      'id_type_paiement': idTypePaiement,
+      'user': jsonEncode(user.mobPayload),
+    });
+    if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? 'Le paiement a échoué.' : 'Paiement enregistré avec succès.'),
+    );
+  }
+
+  /// Validation d'une réservation (reste à 0) : mêmes mouvements de stock
+  /// que valider(), déclenchés à partir des données figées à la réservation.
+  Future<EchangeResult> validerReservation({
+    required String idEchangeReservation,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('echange_valider_reservation', fields: {
+      'id_echange_reservation': idEchangeReservation,
+      'user': jsonEncode(user.mobPayload),
+    });
+    if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? "L'échange a échoué." : 'Échange validé avec succès.'),
+    );
+  }
+
+  /// Annulation d'une réservation (avant validation) : aucun mouvement de
+  /// stock à défaire, déverrouille juste les deux articles.
+  Future<EchangeResult> annulerReservation({
+    required String idEchangeReservation,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('echange_annuler_reservation', fields: {
+      'id_echange_reservation': idEchangeReservation,
+      'user': jsonEncode(user.mobPayload),
+    });
+    if (data is! Map) return EchangeResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? "L'annulation a échoué." : 'Réservation annulée.'),
     );
   }
 }

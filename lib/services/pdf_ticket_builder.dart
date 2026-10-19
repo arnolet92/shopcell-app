@@ -85,6 +85,11 @@ class PdfTicketBuilder {
     /// paiement, reste à payer) suivi des conditions de réservation — design
     /// de reçu, pas de facture. En-tête et tableau des articles inchangés.
     bool isReservation = false,
+    /// Échange "en réservation" (bouton "Réservez l'échange") : même pied de
+    /// page que isReservation (récapitulatif du paiement), mais filigrane
+    /// "Échange en réservation" — distinct d'une réservation de vente et
+    /// d'un échange classique déjà finalisé.
+    bool isEchangeReservation = false,
     /// Acomptes versés pour cette réservation, ventilés par type de paiement
     /// — affichés dans le pied de page (voir isReservation ci-dessus).
     List<PaymentSplit>? paiements,
@@ -133,11 +138,13 @@ class PdfTicketBuilder {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
           theme: theme,
-          buildForeground: (isCopie || isEchange || isProforma || isReservation)
+          buildForeground: (isCopie || isEchange || isProforma || isReservation || isEchangeReservation)
               ? (context) => pw.Stack(
                     children: [
                       if (isProforma)
                         pw.Positioned.fill(child: _proformaWatermark())
+                      else if (isEchangeReservation)
+                        pw.Positioned.fill(child: _echangeReservationWatermark())
                       else if (isReservation)
                         pw.Positioned.fill(child: _reservationWatermark())
                       else if (isEchange)
@@ -175,7 +182,7 @@ class PdfTicketBuilder {
             _articleRetourneSection(articleRetourne),
           ],
           pw.SizedBox(height: 10),
-          isReservation ? _reservationFooter(total: total, paiements: paiements) : _garantieEtSignature(),
+          (isReservation || isEchangeReservation) ? _reservationFooter(total: total, paiements: paiements) : _garantieEtSignature(),
         ],
       ),
     );
@@ -247,6 +254,24 @@ class PdfTicketBuilder {
           child: pw.Text(
             'Reçue',
             style: pw.TextStyle(fontSize: 90, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED), letterSpacing: 6),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Filigrane incliné "Échange en réservation" — même orientation/violet
+  /// que "Reçue" (réservation de vente), pour le reçu d'un échange "Réservez
+  /// l'échange" (supplément payé partiellement, aucun mouvement de stock).
+  static pw.Widget _echangeReservationWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: 0.6,
+        child: pw.Opacity(
+          opacity: 0.18,
+          child: pw.Text(
+            'Échange en réservation',
+            style: pw.TextStyle(fontSize: 46, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED), letterSpacing: 2),
           ),
         ),
       ),

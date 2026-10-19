@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/facture_service.dart';
 import '../auth/login_screen.dart';
 import '../credit/credit_clients_screen.dart';
+import '../echange/echange_reservation_list_screen.dart';
 import '../echange/echange_search_screen.dart';
 import '../facture/facture_list_screen.dart';
 import '../produit/produit_list_screen.dart';
@@ -23,11 +24,12 @@ const _wideBreakpoint = 760.0;
 // plutôt qu'un onglet persistant de l'IndexedStack.
 const _rechercheIndex = 2;
 const _echangeIndex = 3;
-const _creditIndex = 4;
-const _reservationsIndex = 5;
-const _facturesPayeesIndex = 6;
-const _facturesAnnuleesIndex = 7;
-const _parametresIndex = 8;
+const _echangeReservationIndex = 4;
+const _creditIndex = 5;
+const _reservationsIndex = 6;
+const _facturesPayeesIndex = 7;
+const _facturesAnnuleesIndex = 8;
+const _parametresIndex = 9;
 // "Annulation en attente" (patron uniquement) est toujours ajoutée en
 // DERNIÈRE position par sidebarItemsFor() — voir app_sidebar.dart — donc son
 // index est simplement la longueur de la liste de base, jamais un index fixe
@@ -115,6 +117,12 @@ class _HomeShellState extends State<HomeShell> {
     if (index == _echangeIndex) {
       if (_user != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => EchangeSearchScreen(user: _user!)));
+      }
+      return;
+    }
+    if (index == _echangeReservationIndex) {
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => EchangeReservationListScreen(user: _user!)));
       }
       return;
     }
