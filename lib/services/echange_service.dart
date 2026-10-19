@@ -449,8 +449,8 @@ class EchangeService {
     if (isDefaut && (motifReparation == null || motifReparation.trim().isEmpty)) {
       return EchangeResult(success: false, message: 'Le motif de réparation est obligatoire pour un article retourné avec défaut.');
     }
-    if (nomComplet.trim().isEmpty || prenom.trim().isEmpty || telephone.trim().isEmpty || cin.trim().isEmpty) {
-      return EchangeResult(success: false, message: 'Le nom, le prénom, le téléphone et le CIN du client sont obligatoires pour réserver cet échange.');
+    if (nomComplet.trim().isEmpty) {
+      return EchangeResult(success: false, message: 'Le nom du client est obligatoire pour réserver cet échange.');
     }
     final fields = <String, String>{
       'id_ventes': idVentes,

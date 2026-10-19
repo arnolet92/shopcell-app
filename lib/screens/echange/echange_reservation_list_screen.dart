@@ -212,6 +212,20 @@ class _ReservationCardState extends State<_ReservationCard> {
     AppDataCache.instance.invalidate(CacheDomain.produits);
     AppDataCache.instance.invalidate(CacheDomain.facturesPayees);
 
+    final printMessage = await _imprimerA4(silent: true);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${result.message ?? 'Échange validé avec succès.'} $printMessage')),
+    );
+    widget.onChanged();
+  }
+
+  /// Imprime/partage le reçu A4 de cette réservation, à tout moment (pas
+  /// seulement après validation) — filigrane "Échange en réservation",
+  /// acompte déjà versé et reste à payer. [silent] : n'affiche pas son
+  /// propre snackbar (utilisé quand l'appelant affiche déjà son propre
+  /// message, voir _valider()).
+  Future<String> _imprimerA4({bool silent = false}) async {
     final item = widget.item;
     final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : item.montantFinal;
     final lines = [
@@ -234,7 +248,7 @@ class _ReservationCardState extends State<_ReservationCard> {
       imei1: item.oldImei1,
       imei2: item.oldImei2,
     );
-    final paiements = [PaymentSplit(idTypePaiement: '0', typeLabel: 'Acompte', montant: item.paye)];
+    final paiements = item.paye > 0 ? [PaymentSplit(idTypePaiement: '0', typeLabel: 'Acompte', montant: item.paye)] : <PaymentSplit>[];
 
     final printMessage = await ReceiptPrintService.instance.offerPrint(
       context,
@@ -251,11 +265,10 @@ class _ReservationCardState extends State<_ReservationCard> {
       articleRetourne: articleRetourne,
       paiements: paiements,
     );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${result.message ?? 'Échange validé avec succès.'} $printMessage')),
-    );
-    widget.onChanged();
+    if (!silent && mounted && printMessage.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(printMessage)));
+    }
+    return printMessage;
   }
 
   Future<void> _annuler() async {
@@ -307,9 +320,25 @@ class _ReservationCardState extends State<_ReservationCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(item.clientNomComplet ?? 'Client', style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-          if (item.clientTelephone != null)
-            Text(item.clientTelephone!, style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.clientNomComplet ?? 'Client', style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    if (item.clientTelephone != null)
+                      Text(item.clientTelephone!, style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _submitting ? null : _imprimerA4,
+                icon: const Icon(Icons.print_rounded, color: Color(0xFFA78BFA)),
+                tooltip: 'Imprimer reçu A4',
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           Text('${item.oldDesignation} → ${item.newDesignation}', style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary)),
           const SizedBox(height: 10),

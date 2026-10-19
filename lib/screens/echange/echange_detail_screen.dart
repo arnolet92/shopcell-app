@@ -393,11 +393,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
       setState(() => _error = 'Le motif de réparation est obligatoire.');
       return;
     }
-    if (_resaNomCtrl.text.trim().isEmpty ||
-        _resaPrenomCtrl.text.trim().isEmpty ||
-        _resaTelephoneCtrl.text.trim().isEmpty ||
-        _resaCinCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Le nom, le prénom, le téléphone et le CIN du client sont obligatoires pour réserver cet échange.');
+    if (_resaNomCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Le nom du client est obligatoire pour réserver cet échange.');
       return;
     }
     final ok = await showDialog<bool>(
@@ -442,9 +439,59 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     if (!mounted) return;
     if (result.success) {
       AppDataCache.instance.invalidate(CacheDomain.produits);
+
+      final entete = _entete;
+      final ligneRepris = _ligneRepris;
+      String? s(dynamic v) {
+        final t = v?.toString().trim();
+        return (t == null || t.isEmpty) ? null : t;
+      }
+
+      final prixUnitaireTicket = rec.prixAjoute != 0 ? rec.prixAjoute : rec.newPrixUnitaire;
+      final lines = [
+        ReceiptLine(
+          designation: produit.designation,
+          qte: 1,
+          prixUnitaire: prixUnitaireTicket,
+          total: prixUnitaireTicket,
+          numSerie: produit.numSerie,
+          imei1: produit.imei1,
+          imei2: produit.imei2,
+          nomModel: produit.nomModel,
+          nomMarque: produit.nomMarque,
+        ),
+      ];
+      final articleRetourne = ReceiptLine(
+        designation: s(ligneRepris?['designation_produits']) ?? rec.oldDesignation ?? 'Article',
+        qte: 1,
+        prixUnitaire: 0,
+        total: 0,
+        numSerie: s(ligneRepris?['num_serie']),
+        imei1: s(ligneRepris?['imei1']),
+        imei2: s(ligneRepris?['imei2']),
+        nomModel: s(ligneRepris?['nom_model']),
+        nomMarque: s(ligneRepris?['nom_marque']),
+      );
+
+      final printMessage = await ReceiptPrintService.instance.offerPrint(
+        context,
+        lines: lines,
+        total: rec.montantFinal,
+        cashierName: widget.user.nomComplet,
+        clientName: _resaNomCtrl.text.trim().isNotEmpty ? _resaNomCtrl.text : entete?['nom_complet']?.toString(),
+        clientPrenom: _resaPrenomCtrl.text.trim().isNotEmpty ? _resaPrenomCtrl.text : entete?['prenom_personnes']?.toString(),
+        clientTelephone: _resaTelephoneCtrl.text.trim().isNotEmpty ? _resaTelephoneCtrl.text : entete?['telephone']?.toString(),
+        clientCin: _resaCinCtrl.text.trim().isNotEmpty ? _resaCinCtrl.text : entete?['cin_personnes']?.toString(),
+        numeroFacture: entete?['numero_facture']?.toString(),
+        isEchange: true,
+        isEchangeReservation: true,
+        articleRetourne: articleRetourne,
+        paiements: _effectiveSplits,
+      );
+      if (!mounted) return;
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? 'Échange réservé avec succès.')),
+        SnackBar(content: Text('${result.message ?? 'Échange réservé avec succès.'} $printMessage')),
       );
     } else {
       setState(() {
@@ -875,7 +922,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     );
   }
 
-  /// Coordonnées client, obligatoires pour "Réservez l'échange" (reste > 0).
+  /// Coordonnées client pour "Réservez l'échange" (reste > 0) — seul le nom
+  /// est obligatoire, prénom/téléphone/CIN restent facultatifs.
   Widget _reservationClientSection() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -893,7 +941,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Coordonnées client (obligatoires pour réserver)',
+                  'Coordonnées client (nom obligatoire pour réserver)',
                   style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFFC4B5FD)),
                 ),
               ),
@@ -902,11 +950,11 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
           const SizedBox(height: 12),
           InlineField(label: 'Nom complet', controller: _resaNomCtrl, prefixIcon: Icons.person_outline_rounded),
           const SizedBox(height: 10),
-          InlineField(label: 'Prénom', controller: _resaPrenomCtrl, prefixIcon: Icons.person_outline_rounded),
+          InlineField(label: 'Prénom (facultatif)', controller: _resaPrenomCtrl, prefixIcon: Icons.person_outline_rounded),
           const SizedBox(height: 10),
-          InlineField(label: 'Téléphone', controller: _resaTelephoneCtrl, prefixIcon: Icons.phone_rounded, keyboardType: TextInputType.phone),
+          InlineField(label: 'Téléphone (facultatif)', controller: _resaTelephoneCtrl, prefixIcon: Icons.phone_rounded, keyboardType: TextInputType.phone),
           const SizedBox(height: 10),
-          InlineField(label: 'N° CIN', controller: _resaCinCtrl, prefixIcon: Icons.badge_outlined),
+          InlineField(label: 'N° CIN (facultatif)', controller: _resaCinCtrl, prefixIcon: Icons.badge_outlined),
         ],
       ),
     );
