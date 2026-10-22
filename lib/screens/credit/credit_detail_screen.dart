@@ -50,6 +50,7 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
 
   bool _submitting = false;
   String? _printingFactureId;
+  String? _annulantFactureId;
   String? _error;
   bool _changed = false;
 
@@ -74,7 +75,7 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final detail = await CreditService.instance.loadFactures(widget.client.idPersonnes);
+    final detail = await CreditService.instance.loadFactures(widget.client.idPersonnes, onlyReservations: widget.isReservation);
     if (!mounted) return;
     setState(() {
       _detail = detail;
@@ -176,6 +177,45 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
     }
   }
 
+  /// Annule une facture de réservation entière, après confirmation — miroir
+  /// du bouton "Annuler" de Vente/facture_info côté web : les articles
+  /// reviennent en stock et la facture passe dans "Factures annulées".
+  Future<void> _annulerReservation(CreditFacture facture) async {
+    if (_annulantFactureId != null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: const Text('Annuler cette réservation ?', style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(
+          'Facture ${facture.numeroFacture ?? ''} (${_fmt(facture.montant)})\n'
+          'Les articles réservés reviendront en stock. Les acomptes déjà versés '
+          '(${_fmt(facture.donnee)}) ne sont pas remboursés automatiquement.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Retour')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Annuler la réservation', style: TextStyle(color: AppColors.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _annulantFactureId = facture.idClient);
+    final result = await CreditService.instance.annulerReservation(idClient: facture.idClient, user: widget.user);
+    if (!mounted) return;
+    setState(() => _annulantFactureId = null);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.message ?? '')));
+    if (result.success) {
+      _changed = true;
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      await _load();
+    }
+  }
+
   /// Paiement d'UNE facture de réservation précise (voir _ReservationFactureCard
   /// ci-dessous) — jamais mélangé avec une autre facture de la même personne.
   /// Recharge la liste puis propose immédiatement l'impression du reçu, comme
@@ -258,6 +298,9 @@ class _CreditDetailScreenState extends State<CreditDetailScreen> {
                               printing: _printingFactureId == f.idClient,
                               onPrint: () => _printReservationFacture(f),
                               onPayer: (idTypePaiement, somme) => _payerFacture(f, idTypePaiement, somme),
+                              onDetail: () => _showFactureDetail(f),
+                              onAnnuler: CreditService.peutAnnulerReservation(widget.user) ? () => _annulerReservation(f) : null,
+                              annulant: _annulantFactureId == f.idClient,
                             ))
                       else
                         ...detail.list.map(_factureTile),
@@ -474,6 +517,9 @@ class _ReservationFactureCard extends StatefulWidget {
     required this.printing,
     required this.onPrint,
     required this.onPayer,
+    required this.onDetail,
+    this.onAnnuler,
+    this.annulant = false,
   });
 
   final CreditFacture facture;
@@ -481,6 +527,12 @@ class _ReservationFactureCard extends StatefulWidget {
   final bool printing;
   final VoidCallback onPrint;
   final Future<String?> Function(String idTypePaiement, double somme) onPayer;
+  /// Articles de la facture (bottom sheet, même rendu que "Les crédits").
+  final VoidCallback onDetail;
+  /// null si le rôle de l'utilisateur ne permet pas d'annuler (voir
+  /// CreditService.peutAnnulerReservation) : le bouton n'est pas affiché.
+  final VoidCallback? onAnnuler;
+  final bool annulant;
 
   @override
   State<_ReservationFactureCard> createState() => _ReservationFactureCardState();
@@ -633,6 +685,40 @@ class _ReservationFactureCardState extends State<_ReservationFactureCard> {
             const SizedBox(height: 12),
             GradientButton(label: 'Payer', icon: Icons.check_circle_rounded, loading: _submitting, onPressed: _submit),
           ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: widget.onDetail,
+                  icon: const Icon(Icons.receipt_long_rounded, size: 16, color: AppColors.accentLight),
+                  label: const Text('Voir le détail', style: TextStyle(color: AppColors.accentLight, fontSize: 12.5)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              if (widget.onAnnuler != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: widget.annulant || _submitting ? null : widget.onAnnuler,
+                    icon: widget.annulant
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.red))
+                        : const Icon(Icons.cancel_outlined, size: 16, color: AppColors.red),
+                    label: const Text('Annuler', style: TextStyle(color: AppColors.red, fontSize: 12.5)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

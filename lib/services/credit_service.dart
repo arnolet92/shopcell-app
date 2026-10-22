@@ -146,8 +146,13 @@ class CreditService {
     return data.whereType<Map>().map((e) => CreditClient.fromJson(Map<String, dynamic>.from(e))).toList();
   }
 
-  Future<CreditFacturesDetail> loadFactures(String idPersonnes) async {
-    final data = await ApiClient.instance.post('credit_factures', fields: {'id_personnes': idPersonnes});
+  /// [onlyReservations] : écran "Réservations" — seules les factures de
+  /// réservation du client (pas ses crédits ordinaires), totaux inclus.
+  Future<CreditFacturesDetail> loadFactures(String idPersonnes, {bool onlyReservations = false}) async {
+    final data = await ApiClient.instance.post('credit_factures', fields: {
+      'id_personnes': idPersonnes,
+      if (onlyReservations) 'is_reservation': '1',
+    });
     if (data is! Map) return CreditFacturesDetail(list: [], restant: 0, donnee: 0, totalWithRemise: 0);
     double d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
     final list = (data['list'] is List)
@@ -205,6 +210,26 @@ class CreditService {
     return CreditResult(
       success: !error,
       message: data['msg']?.toString() ?? (error ? 'Le paiement a échoué.' : 'Paiement enregistré avec succès.'),
+    );
+  }
+
+  /// Rôles autorisés à annuler une facture de réservation — mêmes que le
+  /// bouton "Annuler" de Vente/facture_info côté web.
+  static bool peutAnnulerReservation(UserModel user) => const {'super', 'admin', 'patron', 'gerant'}.contains(user.role);
+
+  /// Annule une facture de réservation entière (toutes ses lignes) — miroir
+  /// mobile de Vente::cancelAllAddition() (Mob::reservation_annuler_facture()).
+  Future<CreditResult> annulerReservation({required String idClient, required UserModel user}) async {
+    final data = await ApiClient.instance.post('reservation_annuler_facture', fields: {
+      'id_client': idClient,
+      'role': user.role,
+      'user': jsonEncode(user.mobPayload),
+    });
+    if (data is! Map) return CreditResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return CreditResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? "L'annulation a échoué." : 'Réservation annulée.'),
     );
   }
 }
