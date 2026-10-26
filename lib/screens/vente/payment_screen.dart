@@ -215,13 +215,55 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
     final sum = _effectiveSum;
+    // Vente à crédit (somme donnée inférieure au total, 0 compris) : un
+    // client est obligatoire. Un nom tapé dans la recherche sans avoir été
+    // choisi n'était pas transmis — la vente était alors refusée ; on crée
+    // et rattache ce client automatiquement.
+    if (sum < _total && _selectedClient == null) {
+      final nom = _clientSearchCtrl.text.trim();
+      if (nom.isEmpty) {
+        setState(() => _error = 'Vente à crédit : renseignez le client (recherchez-le ou saisissez son nom).');
+        return;
+      }
+      final match = _clients.where((c) => c.nomComplet.trim().toLowerCase() == nom.toLowerCase()).toList();
+      if (match.isNotEmpty) {
+        setState(() => _selectedClient = match.last);
+      } else {
+        setState(() => _submitting = true);
+        final created = await VenteService.instance.addClient(nom);
+        if (!mounted) return;
+        if (!created.success) {
+          setState(() {
+            _submitting = false;
+            _error = created.message ?? "Impossible d'enregistrer ce client.";
+          });
+          return;
+        }
+        final refreshed = await VenteService.instance.loadClients();
+        if (!mounted) return;
+        final nouveaux = refreshed.where((c) => c.nomComplet.trim().toLowerCase() == nom.toLowerCase()).toList();
+        setState(() {
+          _submitting = false;
+          _clients = refreshed;
+          _selectedClient = nouveaux.isNotEmpty ? nouveaux.last : null;
+        });
+        if (_selectedClient == null) {
+          setState(() => _error = "Impossible d'enregistrer ce client.");
+          return;
+        }
+      }
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.bgCard,
-        title: const Text('Confirmer la vente ?', style: TextStyle(color: AppColors.textPrimary)),
+        title: Text(sum < _total && !widget.isReservation ? 'Confirmer la vente à crédit ?' : 'Confirmer la vente ?',
+            style: const TextStyle(color: AppColors.textPrimary)),
         content: Text(
-          'Total : ${_fmtMoney(_total)}\nReçu : ${_fmtMoney(sum)}${sum > _total ? '\nMonnaie à rendre : ${_fmtMoney(sum - _total)}' : ''}',
+          'Total : ${_fmtMoney(_total)}\nReçu : ${_fmtMoney(sum)}'
+          '${sum > _total ? '\nMonnaie à rendre : ${_fmtMoney(sum - _total)}' : ''}'
+          '${sum < _total ? '\nReste à crédit : ${_fmtMoney(_total - sum)}\nClient : ${_selectedClient?.nomComplet ?? ''}' : ''}',
           style: const TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
