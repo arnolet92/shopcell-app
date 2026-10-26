@@ -54,6 +54,8 @@ class ReceiptPrintService {
     /// Bouton "Réservez l'échange" : même pied de page que isReservation,
     /// filigrane "Échange en réservation" à la place de "Reçue".
     bool isEchangeReservation = false,
+    bool isEchangeCredit = false,
+    List<ReceiptLine>? articlesRetournes,
   }) async {
     final ticketCfg = await PrinterService.instance.config;
     final hasTicket = ticketCfg?.isConfigured ?? false;
@@ -103,6 +105,8 @@ class ReceiptPrintService {
         articleRetourne: articleRetourne,
         isReservation: isReservation,
         isEchangeReservation: isEchangeReservation,
+        isEchangeCredit: isEchangeCredit,
+        articlesRetournes: articlesRetournes,
         paiements: paiements,
       );
       if (choice == 'a4_share') {
@@ -172,6 +176,8 @@ class ReceiptPrintService {
     ReceiptLine? articleRetourne,
     bool isReservation = false,
     bool isEchangeReservation = false,
+    bool isEchangeCredit = false,
+    List<ReceiptLine>? articlesRetournes,
     List<PaymentSplit>? paiements,
   }) async {
     final shopInfo = await VenteService.instance.loadShopInfo();
@@ -205,6 +211,8 @@ class ReceiptPrintService {
       articleRetourne: articleRetourne,
       isReservation: isReservation,
       isEchangeReservation: isEchangeReservation,
+      isEchangeCredit: isEchangeCredit,
+      articlesRetournes: articlesRetournes,
       paiements: paiements,
     );
   }

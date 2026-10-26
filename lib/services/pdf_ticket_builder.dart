@@ -90,11 +90,21 @@ class PdfTicketBuilder {
     /// "Échange en réservation" — distinct d'une réservation de vente et
     /// d'un échange classique déjà finalisé.
     bool isEchangeReservation = false,
+    /// Échange validé "en crédit" : filigrane "Échange à crédit", et le
+    /// récapitulatif du paiement (total, somme donnée par type, reste à
+    /// payer) précède la garantie habituelle.
+    bool isEchangeCredit = false,
+    /// Échange de plusieurs appareils : tous les articles repris (remplace
+    /// [articleRetourne] quand il est fourni).
+    List<ReceiptLine>? articlesRetournes,
     /// Acomptes versés pour cette réservation, ventilés par type de paiement
     /// — affichés dans le pied de page (voir isReservation ci-dessus).
     List<PaymentSplit>? paiements,
   }) async {
     final doc = pw.Document();
+    final retournes = (articlesRetournes != null && articlesRetournes.isNotEmpty)
+        ? articlesRetournes
+        : (articleRetourne != null ? [articleRetourne] : const <ReceiptLine>[]);
 
     pw.ImageProvider? logo;
     if (logoUrl != null && logoUrl.trim().isNotEmpty) {
@@ -138,13 +148,15 @@ class PdfTicketBuilder {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(26),
           theme: theme,
-          buildForeground: (isCopie || isEchange || isProforma || isReservation || isEchangeReservation)
+          buildForeground: (isCopie || isEchange || isProforma || isReservation || isEchangeReservation || isEchangeCredit)
               ? (context) => pw.Stack(
                     children: [
                       if (isProforma)
                         pw.Positioned.fill(child: _proformaWatermark())
                       else if (isEchangeReservation)
                         pw.Positioned.fill(child: _echangeReservationWatermark())
+                      else if (isEchangeCredit)
+                        pw.Positioned.fill(child: _echangeCreditWatermark())
                       else if (isReservation)
                         pw.Positioned.fill(child: _reservationWatermark())
                       else if (isEchange)
@@ -177,12 +189,19 @@ class PdfTicketBuilder {
           ),
           pw.SizedBox(height: 10),
           _articlesTable(lines: lines, total: total),
-          if (articleRetourne != null) ...[
-            pw.SizedBox(height: 10),
-            _articleRetourneSection(articleRetourne),
+          for (var i = 0; i < retournes.length; i++) ...[
+            pw.SizedBox(height: i == 0 ? 10 : 6),
+            _articleRetourneSection(retournes[i], numero: retournes.length > 1 ? i + 1 : null),
           ],
           pw.SizedBox(height: 10),
-          (isReservation || isEchangeReservation) ? _reservationFooter(total: total, paiements: paiements) : _garantieEtSignature(),
+          if (isReservation || isEchangeReservation)
+            _reservationFooter(total: total, paiements: paiements)
+          else if (isEchangeCredit) ...[
+            _paiementRecap(total: total, paiements: paiements, credit: true),
+            pw.SizedBox(height: 10),
+            _garantieEtSignature(),
+          ] else
+            _garantieEtSignature(),
         ],
       ),
     );
@@ -283,7 +302,7 @@ class PdfTicketBuilder {
   /// du tableau, qui montre l'article remis (sortie du stock). Volontairement
   /// réduit à la désignation + la capacité (mémoire) : les autres détails
   /// (n° série, IMEI, modèle) ne sont pas pertinents pour cet article repris.
-  static pw.Widget _articleRetourneSection(ReceiptLine article) {
+  static pw.Widget _articleRetourneSection(ReceiptLine article, {int? numero}) {
     final details = <String>[];
     if ((article.nomMarque ?? '').trim().isNotEmpty) details.add('Capacité: ${article.nomMarque}');
 
@@ -294,7 +313,7 @@ class PdfTicketBuilder {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('Article retourné :', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5)),
+          pw.Text(numero == null ? 'Article retourné :' : 'Article retourné $numero :', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9.5)),
           pw.SizedBox(height: 3),
           pw.Text(article.designation, style: const pw.TextStyle(fontSize: 9)),
           if (details.isNotEmpty) ...[
@@ -563,17 +582,16 @@ class PdfTicketBuilder {
     );
   }
 
-  /// Pied de page du reçu de réservation (bouton "Réserver") : récapitulatif
-  /// du paiement (total, acompte par type de paiement, reste à payer) puis
-  /// les conditions de réservation — remplace entièrement la garantie/les
-  /// exclusions/la signature d'une facture normale. En-tête et tableau des
-  /// articles restent ceux d'une facture classique (voir buildSaleReceiptA4).
-  static pw.Widget _reservationFooter({required double total, List<PaymentSplit>? paiements}) {
-    const small = pw.TextStyle(fontSize: 8);
-    const smallBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
-    final splits = paiements ?? const <PaymentSplit>[];
-    final acompte = splits.fold(0.0, (sum, p) => sum + p.montant);
-    final reste = total - acompte;
+  /// Encadré "Récapitulatif du paiement" : total, montants versés par type de
+  /// paiement, reste à payer. Paiement complet : le total seul, comme un
+  /// encaissement normal. [credit] : échange à crédit — "Somme donnée" au
+  /// lieu d'"Acompte", encadré rouge.
+  static pw.Widget _paiementRecap({required double total, List<PaymentSplit>? paiements, bool credit = false}) {
+    final splits = (paiements ?? const <PaymentSplit>[]).where((p) => p.montant != 0).toList();
+    final verse = splits.fold(0.0, (sum, p) => sum + p.montant);
+    final reste = total - verse;
+    final couleur = credit ? PdfColors.red700 : PdfColor.fromInt(0xFF7C3AED);
+    final libelle = credit ? 'Somme donnée' : 'Acompte';
 
     pw.Widget row(String label, String value, {bool bold = false, PdfColor? color}) => pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -586,38 +604,65 @@ class PdfTicketBuilder {
           ),
         );
 
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(width: 0.6, color: couleur),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(credit ? 'RÉCAPITULATIF DU PAIEMENT — CRÉDIT' : 'RÉCAPITULATIF DU PAIEMENT',
+              style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: couleur)),
+          pw.SizedBox(height: 6),
+          if (reste <= 0)
+            row('Total', _money(total), bold: true)
+          else ...[
+            row('Total', _money(total)),
+            if (splits.isEmpty)
+              row(libelle, _money(0))
+            else
+              for (final p in splits) row('$libelle (${p.typeLabel})', _money(p.montant)),
+            pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 3), child: pw.Divider(height: 1, thickness: 0.5)),
+            row('Reste à payer', _money(reste), bold: true, color: PdfColors.red),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Filigrane incliné "Échange à crédit" (rouge) — échange validé avec une
+  /// somme donnée inférieure au montant dû.
+  static pw.Widget _echangeCreditWatermark() {
+    return pw.Center(
+      child: pw.Transform.rotate(
+        angle: 0.6,
+        child: pw.Opacity(
+          opacity: 0.16,
+          child: pw.Text(
+            'Échange à crédit',
+            style: pw.TextStyle(fontSize: 58, fontWeight: pw.FontWeight.bold, color: PdfColors.red700, letterSpacing: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Pied de page du reçu de réservation (bouton "Réserver") : récapitulatif
+  /// du paiement (total, acompte par type de paiement, reste à payer) puis
+  /// les conditions de réservation — remplace entièrement la garantie/les
+  /// exclusions/la signature d'une facture normale. En-tête et tableau des
+  /// articles restent ceux d'une facture classique (voir buildSaleReceiptA4).
+  static pw.Widget _reservationFooter({required double total, List<PaymentSplit>? paiements}) {
+    const small = pw.TextStyle(fontSize: 8);
+    const smallBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Container(
-          width: double.infinity,
-          padding: const pw.EdgeInsets.all(10),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(width: 0.6, color: PdfColor.fromInt(0xFF7C3AED)),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text('RÉCAPITULATIF DU PAIEMENT', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF7C3AED))),
-              pw.SizedBox(height: 6),
-              // Paiement total, sans reste : comme un encaissement normal, on
-              // n'affiche que le montant total (pas d'acomptes ni de reste à
-              // zéro qui n'apportent plus d'information utile).
-              if (reste <= 0)
-                row('Total', _money(total), bold: true)
-              else ...[
-                row('Total', _money(total)),
-                if (splits.isEmpty)
-                  row('Acompte versé', _money(acompte))
-                else
-                  for (final p in splits) row('Acompte (${p.typeLabel})', _money(p.montant)),
-                pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 3), child: pw.Divider(height: 1, thickness: 0.5)),
-                row('Reste à payer', _money(reste), bold: true, color: PdfColors.red),
-              ],
-            ],
-          ),
-        ),
+        _paiementRecap(total: total, paiements: paiements),
         pw.SizedBox(height: 12),
         pw.Text('CONDITIONS DE RÉSERVATION', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, decoration: pw.TextDecoration.underline)),
         pw.SizedBox(height: 6),

@@ -227,33 +227,46 @@ class _ReservationCardState extends State<_ReservationCard> {
   /// message, voir _valider()).
   Future<String> _imprimerA4({bool silent = false}) async {
     final item = widget.item;
-    final prixUnitaireTicket = item.prixAjoute != 0 ? item.prixAjoute : item.montantFinal;
-    final lines = [
-      ReceiptLine(
-        designation: item.newDesignation,
-        qte: 1,
-        prixUnitaire: prixUnitaireTicket,
-        total: prixUnitaireTicket,
-        numSerie: item.newNumSerie,
-        imei1: item.newImei1,
-        imei2: item.newImei2,
-      ),
-    ];
-    final articleRetourne = ReceiptLine(
-      designation: item.oldDesignation,
-      qte: 1,
-      prixUnitaire: 0,
-      total: 0,
-      numSerie: item.oldNumSerie,
-      imei1: item.oldImei1,
-      imei2: item.oldImei2,
-    );
-    final paiements = item.paye > 0 ? [PaymentSplit(idTypePaiement: '0', typeLabel: 'Acompte', montant: item.paye)] : <PaymentSplit>[];
+    // Un appareil par ligne (réservation de plusieurs appareils) ; chaque
+    // ligne vaut son supplément, le total = supplément dû.
+    final lignes = item.lignes;
+    final lines = lignes.isNotEmpty
+        ? lignes
+            .map((l) => ReceiptLine(
+                  designation: l.newDesignation,
+                  qte: l.qte,
+                  prixUnitaire: l.prixAjoute,
+                  total: l.prixAjoute * l.qte,
+                  numSerie: l.newNumSerie,
+                  imei1: l.newImei1,
+                  imei2: l.newImei2,
+                  nomModel: l.newNomModel,
+                  nomMarque: l.newNomMarque,
+                ))
+            .toList()
+        : [
+            ReceiptLine(
+              designation: item.newDesignation,
+              qte: 1,
+              prixUnitaire: item.prixAjoute,
+              total: item.prixAjoute,
+              numSerie: item.newNumSerie,
+              imei1: item.newImei1,
+              imei2: item.newImei2,
+            ),
+          ];
+    final retournes = lignes.isNotEmpty
+        ? lignes.map((l) => ReceiptLine(designation: l.oldDesignation, qte: l.qte, prixUnitaire: 0, total: 0, nomMarque: l.oldNomMarque)).toList()
+        : [ReceiptLine(designation: item.oldDesignation, qte: 1, prixUnitaire: 0, total: 0)];
+    // Acomptes ventilés par type de paiement (repli : un total "Acompte").
+    final paiements = item.paiementsParType.isNotEmpty
+        ? item.paiementsParType.map((e) => PaymentSplit(idTypePaiement: e.key, typeLabel: e.key, montant: e.value)).toList()
+        : (item.paye > 0 ? [PaymentSplit(idTypePaiement: '0', typeLabel: 'Acompte', montant: item.paye)] : <PaymentSplit>[]);
 
     final printMessage = await ReceiptPrintService.instance.offerPrint(
       context,
       lines: lines,
-      total: item.montantFinal,
+      total: item.prixAjoute,
       cashierName: widget.user.nomComplet,
       clientName: item.clientNomComplet,
       clientPrenom: item.clientPrenom,
@@ -262,7 +275,7 @@ class _ReservationCardState extends State<_ReservationCard> {
       numeroFacture: item.numeroFacture,
       isEchange: true,
       isEchangeReservation: true,
-      articleRetourne: articleRetourne,
+      articlesRetournes: retournes,
       paiements: paiements,
     );
     if (!silent && mounted && printMessage.isNotEmpty) {
@@ -340,7 +353,23 @@ class _ReservationCardState extends State<_ReservationCard> {
             ],
           ),
           const SizedBox(height: 6),
-          Text('${item.oldDesignation} → ${item.newDesignation}', style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary)),
+          if (item.lignes.isEmpty)
+            Text('${item.oldDesignation} → ${item.newDesignation}', style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary))
+          else
+            ...item.lignes.map((l) => Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.smartphone_rounded, size: 13, color: AppColors.textSecondary),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text('${l.oldDesignation} → ${l.newDesignation}',
+                            style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary)),
+                      ),
+                      Text('+ ${_fmt(l.prixAjoute * l.qte)}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFFA78BFA))),
+                    ],
+                  ),
+                )),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

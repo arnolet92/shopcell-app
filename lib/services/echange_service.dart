@@ -179,6 +179,210 @@ class EchangeHistoItem {
   }
 }
 
+double _dd(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse('$v') ?? 0);
+String? _ss(dynamic v) {
+  final t = v?.toString().trim();
+  return (t == null || t.isEmpty) ? null : t;
+}
+
+/// Un appareil de la facture à échanger (échange de plusieurs appareils en
+/// une opération — voir `EchangeManagement::recapMulti()` côté serveur).
+class EchangeItem {
+  EchangeItem({
+    required this.idVentes,
+    this.newProduitsId,
+    this.prixActuelRepris,
+    this.nonUpgrade = false,
+    this.isDefaut = false,
+    this.motifReparation,
+    this.batterie,
+  });
+
+  final String idVentes;
+  final String? newProduitsId;
+  final double? prixActuelRepris;
+  final bool nonUpgrade;
+  final bool isDefaut;
+  final String? motifReparation;
+  final String? batterie;
+
+  Map<String, dynamic> toJson() => {
+        'id_ventes': idVentes,
+        'new_produits_id': newProduitsId,
+        if (prixActuelRepris != null) 'prix_actuel_repris': prixActuelRepris,
+        'non_upgrade': nonUpgrade ? 1 : 0,
+        'isdefaut': isDefaut ? 1 : 0,
+        if (isDefaut && (motifReparation ?? '').trim().isNotEmpty) 'motif_reparation': motifReparation!.trim(),
+        if (isDefaut && (batterie ?? '').trim().isNotEmpty) 'batterie': batterie!.trim(),
+      };
+}
+
+/// Calcul d'un appareil échangé (prix ajouté, montant final).
+class EchangeRecapLigne {
+  EchangeRecapLigne({
+    required this.idVentes,
+    required this.qte,
+    required this.oldDesignation,
+    required this.oldPrixVentes,
+    required this.newProduitsId,
+    required this.newDesignation,
+    required this.newPrixUnitaire,
+    required this.prixAjoute,
+    required this.montantFinal,
+  });
+
+  final String idVentes;
+  final double qte;
+  final String oldDesignation;
+  final double oldPrixVentes;
+  final String newProduitsId;
+  final String newDesignation;
+  final double newPrixUnitaire;
+  final double prixAjoute;
+  final double montantFinal;
+
+  factory EchangeRecapLigne.fromJson(Map<String, dynamic> j) => EchangeRecapLigne(
+        idVentes: '${j['id_ventes'] ?? ''}',
+        qte: _dd(j['qte']),
+        oldDesignation: _ss(j['old_designation']) ?? 'Article',
+        oldPrixVentes: _dd(j['old_prix_ventes']),
+        newProduitsId: '${j['new_produits_id'] ?? ''}',
+        newDesignation: _ss(j['new_designation']) ?? 'Article',
+        newPrixUnitaire: _dd(j['new_prix_unitaire']),
+        prixAjoute: _dd(j['prix_ajoute']),
+        montantFinal: _dd(j['montant_final']),
+      );
+}
+
+/// Récapitulatif d'un échange de un ou plusieurs appareils
+/// (`Mob/echange_recap_multi`) — reste = montant à payer.
+class EchangeRecapMulti {
+  EchangeRecapMulti({
+    required this.error,
+    this.message,
+    this.items = const [],
+    this.totalAvant = 0,
+    this.totalPrixAjoute = 0,
+    this.dejaPaye = 0,
+    this.reste = 0,
+    this.rendu = 0,
+    this.personnesId,
+    this.numeroFacture,
+  });
+
+  final bool error;
+  final String? message;
+  final List<EchangeRecapLigne> items;
+  final double totalAvant;
+  final double totalPrixAjoute;
+  final double dejaPaye;
+  final double reste;
+  final double rendu;
+  final String? personnesId;
+  final String? numeroFacture;
+
+  factory EchangeRecapMulti.fromJson(Map<String, dynamic> j) {
+    if (j['error'] == true) return EchangeRecapMulti(error: true, message: j['msg']?.toString());
+    return EchangeRecapMulti(
+      error: false,
+      items: (j['items'] is List)
+          ? (j['items'] as List).whereType<Map>().map((e) => EchangeRecapLigne.fromJson(Map<String, dynamic>.from(e))).toList()
+          : const [],
+      totalAvant: _dd(j['total_avant']),
+      totalPrixAjoute: _dd(j['total_prix_ajoute']),
+      dejaPaye: _dd(j['deja_paye']),
+      reste: _dd(j['reste']),
+      rendu: _dd(j['rendu']),
+      personnesId: _ss(j['personnes_id']),
+      numeroFacture: _ss(j['numero_facture']),
+    );
+  }
+}
+
+/// Résultat d'une validation / réservation d'échange multi-appareils.
+class EchangeMultiResult {
+  EchangeMultiResult({
+    required this.success,
+    this.message,
+    this.isCredit = false,
+    this.total = 0,
+    this.sommeDonnee = 0,
+    this.reste = 0,
+    this.numeroFacture,
+  });
+
+  final bool success;
+  final String? message;
+  final bool isCredit;
+  final double total;
+  final double sommeDonnee;
+  final double reste;
+  final String? numeroFacture;
+}
+
+/// Coordonnées du client saisies pendant l'échange — enregistrées en base
+/// (fiche mise à jour ou créée, rattachée à la facture). [idPersonnes] :
+/// client existant choisi dans les suggestions.
+class EchangeClientInfo {
+  EchangeClientInfo({this.idPersonnes, this.nom = '', this.prenom = '', this.telephone = '', this.cin = ''});
+  final String? idPersonnes;
+  final String nom;
+  final String prenom;
+  final String telephone;
+  final String cin;
+
+  Map<String, String> toFields() => {
+        if ((idPersonnes ?? '').isNotEmpty) 'id_personnes': idPersonnes!,
+        'nom_complet': nom.trim(),
+        'prenom_personnes': prenom.trim(),
+        'telephone': telephone.trim(),
+        'cin_personnes': cin.trim(),
+      };
+}
+
+/// Un appareil d'un échange en réservation.
+class EchangeReservationLigne {
+  EchangeReservationLigne({
+    required this.oldDesignation,
+    this.oldNomMarque,
+    required this.newDesignation,
+    this.newNumSerie,
+    this.newImei1,
+    this.newImei2,
+    this.newNomModel,
+    this.newNomMarque,
+    required this.newPrixUnitaire,
+    required this.prixAjoute,
+    required this.qte,
+  });
+
+  final String oldDesignation;
+  final String? oldNomMarque;
+  final String newDesignation;
+  final String? newNumSerie;
+  final String? newImei1;
+  final String? newImei2;
+  final String? newNomModel;
+  final String? newNomMarque;
+  final double newPrixUnitaire;
+  final double prixAjoute;
+  final double qte;
+
+  factory EchangeReservationLigne.fromJson(Map<String, dynamic> j) => EchangeReservationLigne(
+        oldDesignation: _ss(j['old_designation']) ?? '-',
+        oldNomMarque: _ss(j['old_nom_marque']),
+        newDesignation: _ss(j['new_designation']) ?? '-',
+        newNumSerie: _ss(j['new_num_serie']),
+        newImei1: _ss(j['new_imei1']),
+        newImei2: _ss(j['new_imei2']),
+        newNomModel: _ss(j['new_nom_model']),
+        newNomMarque: _ss(j['new_nom_marque']),
+        newPrixUnitaire: _dd(j['new_prix_unitaire']),
+        prixAjoute: _dd(j['prix_ajoute']),
+        qte: _dd(j['qte']) == 0 ? 1 : _dd(j['qte']),
+      );
+}
+
 /// Un échange "en réservation" (`Mob/echange_reservation_list`) : le
 /// supplément n'est payé que partiellement — aucun mouvement de stock n'a
 /// encore eu lieu, les deux articles sont juste verrouillés côté serveur
@@ -205,7 +409,14 @@ class EchangeReservationItem {
     required this.reste,
     required this.reservationAt,
     required this.numeroFacture,
+    this.lignes = const [],
+    this.paiementsParType = const [],
   });
+
+  /// Appareils de la réservation (plusieurs possibles).
+  final List<EchangeReservationLigne> lignes;
+  /// Acomptes versés, ventilés par type de paiement (libellé, montant).
+  final List<MapEntry<String, double>> paiementsParType;
 
   final String idEchangeReservation;
   final String? clientNomComplet;
@@ -254,6 +465,16 @@ class EchangeReservationItem {
       reste: d(j['reste']),
       reservationAt: s(j['reservation_at']),
       numeroFacture: s(j['numero_facture_echange']),
+      lignes: (j['lignes'] is List)
+          ? (j['lignes'] as List).whereType<Map>().map((e) => EchangeReservationLigne.fromJson(Map<String, dynamic>.from(e))).toList()
+          : const [],
+      paiementsParType: (j['paiements'] is List)
+          ? (j['paiements'] as List)
+              .whereType<Map>()
+              .map((e) => MapEntry(s(e['nom_type_paiement']) ?? 'Paiement', d(e['donnee'])))
+              .where((e) => e.value != 0)
+              .toList()
+          : const [],
     );
   }
 }
@@ -478,6 +699,65 @@ class EchangeService {
     return EchangeResult(
       success: !error,
       message: data['msg']?.toString() ?? (error ? "La réservation a échoué." : 'Échange réservé avec succès.'),
+    );
+  }
+
+  // ---------------- Échange de plusieurs appareils ----------------
+
+  Future<EchangeRecapMulti> recapMulti(List<EchangeItem> items) async {
+    final data = await ApiClient.instance.post('echange_recap_multi', fields: {
+      'items': jsonEncode(items.map((e) => e.toJson()).toList()),
+    });
+    if (data is! Map) return EchangeRecapMulti(error: true, message: 'Réponse du serveur invalide.');
+    return EchangeRecapMulti.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  /// [mode] : 'normal' (somme donnée suffisante) ou 'credit' (le reste
+  /// devient un crédit du client — nom obligatoire).
+  Future<EchangeMultiResult> validerMulti({
+    required List<EchangeItem> items,
+    required List<PaymentSplit> paiements,
+    required String mode,
+    required EchangeClientInfo client,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('echange_valider_multi', fields: {
+      'items': jsonEncode(items.map((e) => e.toJson()).toList()),
+      'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
+      'mode': mode,
+      'user': jsonEncode(user.mobPayload),
+      ...client.toFields(),
+    });
+    return _multiResult(data, "L'échange a échoué.", 'Échange validé avec succès.');
+  }
+
+  /// Réservation (somme donnée insuffisante, aucun mouvement de stock).
+  Future<EchangeMultiResult> reserverMulti({
+    required List<EchangeItem> items,
+    required List<PaymentSplit> paiements,
+    required EchangeClientInfo client,
+    required UserModel user,
+  }) async {
+    final data = await ApiClient.instance.post('echange_reserver_multi', fields: {
+      'items': jsonEncode(items.map((e) => e.toJson()).toList()),
+      'paiements': jsonEncode(paiements.map((p) => p.toJson()).toList()),
+      'user': jsonEncode(user.mobPayload),
+      ...client.toFields(),
+    });
+    return _multiResult(data, 'La réservation a échoué.', 'Échange réservé avec succès.');
+  }
+
+  EchangeMultiResult _multiResult(dynamic data, String echec, String succes) {
+    if (data is! Map) return EchangeMultiResult(success: false, message: 'Réponse du serveur invalide.');
+    final error = data['error'] == true;
+    return EchangeMultiResult(
+      success: !error,
+      message: data['msg']?.toString() ?? (error ? echec : succes),
+      isCredit: '${data['iscredit'] ?? '0'}' == '1',
+      total: _dd(data['total']),
+      sommeDonnee: _dd(data['somme_donnee']),
+      reste: _dd(data['reste']),
+      numeroFacture: _ss(data['numero_facture']),
     );
   }
 
