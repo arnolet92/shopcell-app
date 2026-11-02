@@ -40,6 +40,15 @@ List<SidebarItemData> sidebarItemsFor(String? role) {
   return role == 'patron' ? [...sidebarItems, _annulationAttenteItem] : sidebarItems;
 }
 
+/// Index (dans [sidebarItemsFor]) des entrées réellement affichées. Le compte
+/// "stock" ne voit que "Gestion d'article" (index 1) ; on garde les index
+/// d'origine pour que HomeShell._select() reste inchangé.
+const stockArticleIndex = 1;
+List<int> visibleSidebarIndexes(String? role) {
+  if (role == 'stock') return const [stockArticleIndex];
+  return List<int>.generate(sidebarItemsFor(role).length, (i) => i);
+}
+
 /// Sidebar premium avec le logo ShopCell en tête, l'utilisateur connecté,
 /// puis le menu de navigation — dont "Gestion d'article" qui reprend
 /// l'organisation de l'écran web `Produit/lst`.
@@ -64,6 +73,7 @@ class AppSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = sidebarItemsFor(user?.role);
+    final visible = visibleSidebarIndexes(user?.role);
     return Container(
       width: 264,
       color: AppColors.bgCard,
@@ -87,8 +97,9 @@ class AppSidebar extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: items.length,
-                itemBuilder: (context, i) {
+                itemCount: visible.length,
+                itemBuilder: (context, pos) {
+                  final i = visible[pos];
                   final item = items[i];
                   final selected = i == selectedIndex;
                   return _SidebarTile(

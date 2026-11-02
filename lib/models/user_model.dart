@@ -41,6 +41,13 @@ class UserModel {
   /// JSON brut de session qui porte la clé `id_user`.
   Map<String, dynamic> get mobPayload => {'id': idUser, 'pseudo': pseudo};
 
+  /// Compte "stock" : consultation seule de "Gestion d'article" (aucune
+  /// autre page, aucun bouton de modification/suppression/action).
+  bool get isStock => role == 'stock';
+
+  /// Seuls patron, gérant et magasinier peuvent modifier un article.
+  bool get canEditArticle => const {'patron', 'gerant', 'magasinier'}.contains(role);
+
   /// Rôles ayant accès à toutes les informations d'un article (prix d'achat,
   /// prix de revient, capacité, couleur, carton, défaut, stockage,
   /// fournisseur, description...) dans "Gestion d'article" — seuls
@@ -62,6 +69,8 @@ class UserModel {
         return 'Serveur';
       case 'client':
         return 'Client';
+      case 'stock':
+        return 'Stock';
       default:
         return 'Utilisateur';
     }

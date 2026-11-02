@@ -55,6 +55,10 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
   String _bulkFiltreActif = '__sans_bulk__';
   final Set<String> _selectedBulkIds = {};
   bool get _canOrganizeBulk => _user?.role == 'patron' || _user?.role == 'gerant';
+  // Compte "stock" : consultation seule (aucune action). Seuls patron,
+  // gérant et magasinier peuvent créer/modifier un article.
+  bool get _readOnly => _user?.isStock ?? false;
+  bool get _canEdit => _user?.canEditArticle ?? false;
   // Tiroir des bulks de la page "Achat confirmé" (fermé par défaut, ouvert par
   // l'icône dossier de l'en-tête) — distinct du tiroir principal de HomeShell.
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -566,7 +570,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!cart.isEmpty) ...[
+            if (!cart.isEmpty && !_readOnly) ...[
               FloatingActionButton.extended(
                 heroTag: 'produit-cart-fab',
                 onPressed: _openCart,
@@ -579,7 +583,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            FloatingActionButton(
+            if (_canEdit) FloatingActionButton(
               heroTag: 'produit-create-fab',
               tooltip: 'Créer un article',
               onPressed: _openCreate,
@@ -609,7 +613,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onMenu: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
                 ),
-                SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged)),
+                SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly)),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 if (isAchatBulkNomme && _canOrganizeBulk) ...[
                   SliverToBoxAdapter(
@@ -649,8 +653,8 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                       imagesParDesignation: _imagesParDesignation,
                       restrictedInfo: restrictedInfo,
                       isAchatConfirmeVue: true,
-                      onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
-                      onEntrerEnStockAchat: _entrerEnStockAchat,
+                      onEdit: _canEdit ? (p, imageUrl) => _openEdit(p, imageUrl) : null,
+                      onEntrerEnStockAchat: _readOnly ? null : _entrerEnStockAchat,
                       selectionMode: _canOrganizeBulk,
                       selectedIds: _selectedBulkIds,
                       onCheckChanged: _onBulkCheckChanged,
@@ -670,7 +674,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!cart.isEmpty) ...[
+          if (!cart.isEmpty && !_readOnly) ...[
             FloatingActionButton.extended(
               heroTag: 'produit-cart-fab',
               onPressed: _openCart,
@@ -683,7 +687,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          FloatingActionButton.extended(
+          if (_canEdit) FloatingActionButton.extended(
             heroTag: 'produit-create-fab',
             onPressed: _openCreate,
             backgroundColor: AppColors.accent,
@@ -722,7 +726,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   ),
                 ),
               ),
-              SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged)),
+              SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly)),
               const SliverToBoxAdapter(child: SizedBox(height: 10)),
               SliverToBoxAdapter(
                 child: Padding(
@@ -773,15 +777,15 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     isAchatAttenteVue: _vue == ProduitVue.achatAttente,
                     showMettreEnAchatAction: _vue == ProduitVue.attente && _user?.role == 'patron',
                     isPatron: _user?.role == 'patron',
-                    onEdit: (p, imageUrl) => _openEdit(p, imageUrl),
-                    onValider: (p) => _valider(p, true),
-                    onMiseEnReparation: _miseEnReparation,
-                    onTerminerReparation: _terminerReparation,
-                    onAddToCart: _addToCart,
-                    onRemettreEnStock: _remettreEnStock,
-                    onEntrerEnStockAchat: _entrerEnStockAchat,
-                    onConfirmerAchat: _confirmerAchat,
-                    onMettreEnAchat: _mettreEnAchatDepuisAttente,
+                    onEdit: _canEdit ? (p, imageUrl) => _openEdit(p, imageUrl) : null,
+                    onValider: _readOnly ? null : (p) => _valider(p, true),
+                    onMiseEnReparation: _readOnly ? null : _miseEnReparation,
+                    onTerminerReparation: _readOnly ? null : _terminerReparation,
+                    onAddToCart: _readOnly ? null : _addToCart,
+                    onRemettreEnStock: _readOnly ? null : _remettreEnStock,
+                    onEntrerEnStockAchat: _readOnly ? null : _entrerEnStockAchat,
+                    onConfirmerAchat: _readOnly ? null : _confirmerAchat,
+                    onMettreEnAchat: _readOnly ? null : _mettreEnAchatDepuisAttente,
                   ),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 90)),
@@ -794,8 +798,10 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 }
 
 class _VueTabs extends StatelessWidget {
-  const _VueTabs({required this.vue, required this.onChanged});
+  const _VueTabs({required this.vue, required this.onChanged, this.stockOnly = false});
   final ProduitVue vue;
+  /// Compte "stock" : seulement les 4 pages autorisées (comme côté web).
+  final bool stockOnly;
   final ValueChanged<ProduitVue> onChanged;
 
   @override
@@ -829,10 +835,10 @@ class _VueTabs extends StatelessWidget {
           chip(ProduitVue.tous, "Gestion d'article", Icons.list_rounded),
           chip(ProduitVue.attente, 'En attente', Icons.access_time_rounded),
           chip(ProduitVue.apresEchange, 'Après échange', Icons.undo_rounded),
-          chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
+          if (!stockOnly) chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
           chip(ProduitVue.reparation, 'Article en réparation', Icons.build_rounded),
-          chip(ProduitVue.achatConfirme, 'Achat confirmé', Icons.check_circle_rounded),
-          chip(ProduitVue.achatAttente, 'Achat en attente', Icons.hourglass_bottom_rounded),
+          if (!stockOnly) chip(ProduitVue.achatConfirme, 'Achat confirmé', Icons.check_circle_rounded),
+          if (!stockOnly) chip(ProduitVue.achatAttente, 'Achat en attente', Icons.hourglass_bottom_rounded),
         ],
       ),
     );

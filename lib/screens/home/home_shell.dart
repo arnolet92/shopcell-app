@@ -73,7 +73,11 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _loadUser() async {
     final user = await AuthService.instance.currentUser;
     if (!mounted) return;
-    setState(() => _user = user);
+    setState(() {
+      _user = user;
+      // Compte "stock" : directement sur "Gestion d'article", seule page autorisée.
+      if (user?.isStock ?? false) _selectedIndex = stockArticleIndex;
+    });
     // Icône notification "Annulation en attente" : patron uniquement,
     // rafraîchie périodiquement tant que l'app reste ouverte (pas de push
     // serveur->mobile disponible ici, un simple polling suffit pour ce
@@ -106,6 +110,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _select(int index) {
+    if ((_user?.isStock ?? false) && index != stockArticleIndex) return;
     if (index == _rechercheIndex) {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SmartSearchScreen()));
       return;
@@ -199,7 +204,10 @@ class _HomeShellState extends State<HomeShell> {
       pendingAnnulationCount: _pendingAnnulationCount,
     );
 
-    final content = IndexedStack(index: _selectedIndex, children: _pages);
+    // Le compte "stock" ne charge jamais l'écran Vente.
+    final content = (_user?.isStock ?? false)
+        ? _pages[stockArticleIndex]
+        : IndexedStack(index: _selectedIndex, children: _pages);
     final bell = _bellIcon();
 
     if (wide) {

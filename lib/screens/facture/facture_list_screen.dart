@@ -205,7 +205,8 @@ class _FactureListScreenState extends State<FactureListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!_loading && _list.isNotEmpty)
+                // En-tête "total facture" retiré sur "Factures payées".
+                if (!_loading && _list.isNotEmpty && !_isPayee)
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 14),
