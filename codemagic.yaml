@@ -31,12 +31,14 @@ workflows:
     scripts:
       - name: Récupérer les dépendances Flutter
         script: flutter pub get
+      - name: Préparer le projet Xcode (migrations Flutter avant la signature)
+        script: flutter build ios --release --no-codesign --config-only
       - name: Configurer la signature automatique (certificats + profils)
         script: |
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           keychain add-certificates
-          xcode-project use-profiles
+          xcode-project use-profiles --custom-export-options='{"method": "app-store"}'
       - name: Compiler et signer l'IPA
         script: flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
     artifacts:
