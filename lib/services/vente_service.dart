@@ -95,6 +95,14 @@ class VenteService {
     return ProduitModel.fromJson(Map<String, dynamic>.from(data));
   }
 
+  /// Bouton "Service" de l'encaissement : renvoie l'article caché du service
+  /// (`Mob/service_produit`), à ajouter au panier comme une ligne normale.
+  Future<ProduitModel?> serviceProduit(String nom, double prix) async {
+    final data = await ApiClient.instance.post('service_produit', fields: {'nom': nom, 'prix': prix.toStringAsFixed(2)});
+    if (data is! Map || data['error'] == true || data['produit'] is! Map) return null;
+    return ProduitModel.fromJson(Map<String, dynamic>.from(data['produit'] as Map));
+  }
+
   List<Map<String, dynamic>> _cartPayload(List<CartLine> lines) {
     return lines
         .map((l) => {

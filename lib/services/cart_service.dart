@@ -3,9 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../models/produit_model.dart';
 
 class CartLine {
-  CartLine({required this.produit, required this.qte, double? prixVente}) : prixVente = prixVente ?? produit.prixUnitaire;
+  CartLine({required this.produit, required this.qte, double? prixVente, this.isService = false}) : prixVente = prixVente ?? produit.prixUnitaire;
   final ProduitModel produit;
   int qte;
+
+  /// Ligne "Service" ajoutée à l'encaissement (article caché côté serveur).
+  final bool isService;
 
   /// Prix de vente de cette ligne — modifiable depuis le panier (bouton
   /// "remise"), sans jamais toucher au prix catalogue de l'article
@@ -44,6 +47,18 @@ class CartService extends ChangeNotifier {
       existing.qte += qte;
     } else {
       _lines[produit.idProduits] = CartLine(produit: produit, qte: qte);
+    }
+    notifyListeners();
+  }
+
+  /// Service ajouté à l'encaissement : le même service ajouté deux fois
+  /// cumule son prix sur une seule ligne.
+  void addService(ProduitModel produit, double prix) {
+    final existing = _lines[produit.idProduits];
+    if (existing != null) {
+      existing.prixVente += prix;
+    } else {
+      _lines[produit.idProduits] = CartLine(produit: produit, qte: 1, prixVente: prix, isService: true);
     }
     notifyListeners();
   }

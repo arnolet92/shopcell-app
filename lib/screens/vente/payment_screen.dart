@@ -51,6 +51,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   PersonneModel? _selectedClient;
   List<LookupItem> _typesPaiement = [];
   String? _selectedTypePaiementId;
+  final _serviceNomCtrl = TextEditingController();
+  final _servicePrixCtrl = TextEditingController();
+  bool _serviceOuvert = false;
+  bool _serviceLoading = false;
 
   final List<PaymentSplit> _splits = [];
 
@@ -86,6 +90,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   void dispose() {
+    _serviceNomCtrl.dispose();
+    _servicePrixCtrl.dispose();
     _clientSearchCtrl.dispose();
     _montantCtrl.dispose();
     _referenceCtrl.dispose();
@@ -378,6 +384,72 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  // Le service entre dans le total : le montant prérempli suit, sauf en
+  // réservation (acompte libre) ou si des paiements sont déjà saisis.
+  void _totalChange() {
+    if (!widget.isReservation && _splits.isEmpty) _montantCtrl.text = _total.toStringAsFixed(0);
+  }
+
+  Future<void> _ajouterService() async {
+    final nom = _serviceNomCtrl.text.trim();
+    final prix = double.tryParse(_servicePrixCtrl.text.replaceAll(' ', '').replaceAll(',', '.')) ?? 0;
+    if (nom.isEmpty || prix <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Entrez le nom et le prix du service.')));
+      return;
+    }
+    setState(() => _serviceLoading = true);
+    final produit = await VenteService.instance.serviceProduit(nom, prix);
+    if (!mounted) return;
+    setState(() {
+      _serviceLoading = false;
+      if (produit != null) {
+        CartService.instance.addService(produit, prix);
+        _serviceNomCtrl.clear();
+        _servicePrixCtrl.clear();
+        _serviceOuvert = false;
+        _totalChange();
+      }
+    });
+    if (produit == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Le service n'a pas pu être ajouté.")));
+    }
+  }
+
+  Widget _rubriqueService() {
+    final services = CartService.instance.lines.where((l) => l.isService).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          onPressed: () => setState(() => _serviceOuvert = !_serviceOuvert),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.orange, foregroundColor: Colors.black, minimumSize: const Size.fromHeight(46)),
+          icon: const Icon(Icons.room_service_rounded),
+          label: const Text('Service', style: TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        if (_serviceOuvert) ...[
+          const SizedBox(height: 10),
+          InlineField(label: 'Nom du service', controller: _serviceNomCtrl, prefixIcon: Icons.room_service_rounded),
+          const SizedBox(height: 10),
+          InlineField(label: 'Prix', controller: _servicePrixCtrl, prefixIcon: Icons.payments_rounded, keyboardType: TextInputType.number),
+          const SizedBox(height: 10),
+          OutlinedButton(onPressed: _serviceLoading ? null : _ajouterService, child: const Text('Ajouter à la facture')),
+        ],
+        for (final l in services)
+          Row(children: [
+            Expanded(child: Text(l.produit.designation, style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textPrimary))),
+            Text(_fmtMoney(l.total), style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.orange, fontWeight: FontWeight.w700)),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMuted),
+              onPressed: () => setState(() {
+                CartService.instance.remove(l.produit.idProduits);
+                _totalChange();
+              }),
+            ),
+          ]),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sum = _splits.isNotEmpty ? _splitsSum : (double.tryParse(_montantCtrl.text.replaceAll(' ', '')) ?? 0);
@@ -408,6 +480,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              _rubriqueService(),
               const SizedBox(height: 20),
 
               Text(

@@ -224,7 +224,8 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
     it.timer?.cancel();
     it.timer = Timer(const Duration(milliseconds: 350), () async {
       final res = v.trim().isEmpty ? <ProduitModel>[] : await EchangeService.instance.searchNewProduit(v);
-      if (!mounted) return;
+      // Une réponse lente ne doit pas remplacer celle de la saisie plus récente.
+      if (!mounted || it.rechercheCtrl.text != v) return;
       setState(() => it.resultats = res);
     });
   }

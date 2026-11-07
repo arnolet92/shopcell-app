@@ -27,6 +27,7 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.calendar_month_rounded, label: 'Réservations'),
   SidebarItemData(icon: Icons.receipt_long_rounded, label: 'Factures payées'),
   SidebarItemData(icon: Icons.block_rounded, label: 'Factures annulées'),
+  SidebarItemData(icon: Icons.outbox_rounded, label: 'Les sorties'),
   SidebarItemData(icon: Icons.settings_rounded, label: 'Paramètres'),
 ];
 

@@ -76,7 +76,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
     _debounceProduit?.cancel();
     _debounceProduit = Timer(const Duration(milliseconds: 400), () async {
       final results = await EchangeService.instance.searchNewProduit(v);
-      if (!mounted) return;
+      if (!mounted || _produitSearchCtrl.text != v) return;
       setState(() => _produitResults = results);
     });
   }
