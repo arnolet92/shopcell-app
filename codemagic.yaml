@@ -31,14 +31,50 @@ workflows:
     scripts:
       - name: Récupérer les dépendances Flutter
         script: flutter pub get
-      - name: Préparer le projet Xcode (migrations Flutter avant la signature)
-        script: flutter build ios --release --no-codesign --config-only
-      - name: Configurer la signature automatique (certificats + profils)
+      - name: Configurer la signature (certificats + profils)
         script: |
+          set -e
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
           keychain add-certificates
-          xcode-project use-profiles --custom-export-options='{"method": "app-store"}'
+
+          echo "Certificats disponibles :"
+          security find-identity -v -p codesigning
+
+          # Profil App Store de l'application, installé par fetch-signing-files.
+          PROFILE_NAME=""
+          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            security cms -D -i "$f" > /tmp/profile.plist
+            APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/profile.plist)
+            if [[ "$APP_ID" == *".$BUNDLE_ID" ]]; then
+              PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist)
+              export PROFILE_NAME
+              export TEAM_ID=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/profile.plist)
+            fi
+          done
+          if [ -z "$PROFILE_NAME" ]; then
+            echo "Aucun profil trouvé pour $BUNDLE_ID"
+            exit 1
+          fi
+          echo "Profil : $PROFILE_NAME / équipe : $TEAM_ID"
+
+          # Signature manuelle sur la cible Runner uniquement (pas RunnerTests).
+          perl -pi -e 's/(PRODUCT_BUNDLE_IDENTIFIER = com\.shopcell\.shopcell;)/$1\n\t\t\t\tCODE_SIGN_STYLE = Manual;\n\t\t\t\tDEVELOPMENT_TEAM = $ENV{TEAM_ID};\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "$ENV{PROFILE_NAME}";\n\t\t\t\tCODE_SIGN_IDENTITY = "Apple Distribution";\n\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";/' ios/Runner.xcodeproj/project.pbxproj
+
+          cat > /Users/builder/export_options.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+          </dict>
+          </plist>
+          PLIST
       - name: Compiler et signer l'IPA
         script: flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
     artifacts:
