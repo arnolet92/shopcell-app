@@ -43,7 +43,9 @@ workflows:
 
           # Profil App Store de l'application, installé par fetch-signing-files.
           PROFILE_NAME=""
-          for f in "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+          # Les nouvelles versions de Xcode/codemagic les rangent dans UserData.
+          for f in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.mobileprovision "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision; do
+            [ -f "$f" ] || continue
             security cms -D -i "$f" > /tmp/profile.plist
             APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/profile.plist)
             if [[ "$APP_ID" == *".$BUNDLE_ID" ]]; then
