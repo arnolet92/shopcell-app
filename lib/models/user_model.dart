@@ -55,6 +55,14 @@ class UserModel {
   /// prix de vente, modèle, série, IMEI 1/2 et batterie.
   bool get hasFullArticleAccess => const {'patron', 'magasinier'}.contains(role);
 
+  /// Caissier : voit tout le détail d'un article sauf prix fournisseur,
+  /// prix d'achat, prix de revient et fournisseur.
+  bool get isCaissier => role == 'caissier';
+
+  /// Fournisseurs (nombre par fournisseur, détails groupés par fournisseur) :
+  /// patron, gérant et magasinier uniquement.
+  bool get canSeeFournisseur => const {'patron', 'gerant', 'magasinier'}.contains(role);
+
   String get roleLabel {
     switch (role) {
       case 'patron':

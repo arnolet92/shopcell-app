@@ -209,6 +209,23 @@ class ProduitGroup {
     return map;
   }
 
+  /// Nombre par fournisseur (stock ; 1 par unité vendue à stock nul), comme
+  /// `$nbByFrns` dans tabproduit2.php.
+  Map<String, double> get nbByFournisseur {
+    final map = <String, double>{};
+    for (final p in items) {
+      final key = fournisseurLabel(p);
+      map[key] = (map[key] ?? 0) + (p.totalStock > 0 ? p.totalStock : 1);
+    }
+    final keys = map.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return {for (final k in keys) k: map[k]!};
+  }
+
+  static String fournisseurLabel(ProduitModel p) {
+    final n = (p.nomFrns ?? '').trim();
+    return n.isEmpty ? 'Sans fournisseur' : n;
+  }
+
   static List<ProduitGroup> groupBy(List<ProduitModel> produits) {
     final map = <String, List<ProduitModel>>{};
     for (final p in produits) {

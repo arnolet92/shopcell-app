@@ -31,6 +31,8 @@ Future<void> showProduitDetailSheet(
   VoidCallback? onAddToCart,
   bool showPrintQr = false,
   bool restrictedInfo = false,
+  bool hidePrixAchat = false,
+  bool? showFournisseur,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -44,6 +46,8 @@ Future<void> showProduitDetailSheet(
       onAddToCart: onAddToCart,
       showPrintQr: showPrintQr,
       restrictedInfo: restrictedInfo,
+      hidePrixAchat: hidePrixAchat,
+      showFournisseur: showFournisseur ?? (!restrictedInfo && !hidePrixAchat),
     ),
   );
 }
@@ -56,6 +60,8 @@ class _ProduitDetailContent extends StatelessWidget {
     this.onAddToCart,
     this.showPrintQr = false,
     this.restrictedInfo = false,
+    this.hidePrixAchat = false,
+    this.showFournisseur = false,
   });
 
   final ProduitModel produit;
@@ -66,6 +72,11 @@ class _ProduitDetailContent extends StatelessWidget {
   /// Comptes hors patron/gérant/magasinier : seuls le prix de vente, le
   /// modèle, le n° de série, les IMEI et la batterie sont affichés.
   final bool restrictedInfo;
+  /// Caissier : tout le détail sauf prix d'achat, prix de revient et
+  /// fournisseur.
+  final bool hidePrixAchat;
+  /// Fournisseur visible : patron, gérant, magasinier.
+  final bool showFournisseur;
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +148,22 @@ class _ProduitDetailContent extends StatelessWidget {
               const SizedBox(height: 20),
               if (restrictedInfo)
                 _PriceTile(label: 'Prix de vente', value: _fmtMoney(produit.prixUnitaire), color: AppColors.green)
+              else if (hidePrixAchat)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _PriceTile(label: 'Prix de vente', value: _fmtMoney(produit.prixUnitaire), color: AppColors.green),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _PriceTile(
+                        label: 'Stock disponible',
+                        value: produit.totalStock.toStringAsFixed(0),
+                        color: produit.totalStock > 0 ? AppColors.accentLight : AppColors.red,
+                      ),
+                    ),
+                  ],
+                )
               else ...[
                 Row(
                   children: [
@@ -182,7 +209,7 @@ class _ProduitDetailContent extends StatelessWidget {
                   if (!restrictedInfo && produit.nomCarton != null) _AttrChip(icon: Icons.inventory_rounded, label: produit.nomCarton!),
                   if (!restrictedInfo && produit.nomDefaut != null) _AttrChip(icon: Icons.report_gmailerrorred_rounded, label: produit.nomDefaut!),
                   if (!restrictedInfo && produit.nomLieu != null) _AttrChip(icon: Icons.place_rounded, label: produit.nomLieu!),
-                  if (!restrictedInfo && produit.nomFrns != null) _AttrChip(icon: Icons.local_shipping_rounded, label: produit.nomFrns!),
+                  if (showFournisseur && produit.nomFrns != null) _AttrChip(icon: Icons.local_shipping_rounded, label: produit.nomFrns!),
                   if (produit.imei1 != null) _AttrChip(icon: Icons.fingerprint_rounded, label: 'IMEI1: ${produit.imei1}'),
                   if (produit.imei2 != null) _AttrChip(icon: Icons.fingerprint_rounded, label: 'IMEI2: ${produit.imei2}'),
                 ],

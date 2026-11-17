@@ -31,6 +31,8 @@ class ProduitGroupCard extends StatefulWidget {
     this.imagesParDesignation = const {},
     this.showValiderAction = false,
     this.restrictedInfo = false,
+    this.hidePrixAchat = false,
+    this.showFournisseur = false,
     this.isAchatConfirmeVue = false,
     this.isAchatAttenteVue = false,
     this.showMettreEnAchatAction = false,
@@ -59,6 +61,11 @@ class ProduitGroupCard extends StatefulWidget {
   /// modèle, n° de série, IMEI et batterie (masque achat/revient, capacité,
   /// couleur, carton, défaut, stockage, fournisseur, description).
   final bool restrictedInfo;
+  /// Caissier : détails visibles sauf prix d'achat/revient et fournisseur.
+  final bool hidePrixAchat;
+  /// Patron, gérant, magasinier : nombre par fournisseur dans l'entête et
+  /// détails groupés par fournisseur.
+  final bool showFournisseur;
   /// Onglet "Achat confirmé" (Produit::lst_achat_confirme) : affiche le
   /// bouton "Entrer en stock" au lieu de "Mise en réparation".
   final bool isAchatConfirmeVue;
@@ -199,7 +206,7 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                                   label: '${group.items.length} unité(s)',
                                   color: AppColors.blue,
                                 ),
-                                if (!widget.restrictedInfo)
+                                if (!widget.restrictedInfo && !widget.hidePrixAchat)
                                   _Badge(
                                     label: '${_fmt(widget.isAchatConfirmeVue ? group.totalRevient : group.totalAchat)} Ar',
                                     color: AppColors.yellow,
@@ -230,11 +237,29 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                       ],
                     ),
                   ],
+                  if (widget.showFournisseur) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        ...group.nbByFournisseur.entries.map(
+                          (e) => _DimChip(icon: Icons.local_shipping_rounded, label: '${e.key} · ${e.value.toStringAsFixed(0)}'),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (_expanded) ...[
                     const SizedBox(height: 12),
                     const Divider(color: AppColors.border, height: 1),
                     const SizedBox(height: 8),
-                    ...group.items.map((p) => _UnitRow(
+                    for (final p in _itemsTries(group)) ...[
+                      if (widget.showFournisseur && _debutFournisseur(group, p))
+                        _FournisseurTitre(
+                          nom: ProduitGroup.fournisseurLabel(p),
+                          nombre: group.nbByFournisseur[ProduitGroup.fournisseurLabel(p)] ?? 0,
+                        ),
+                      _UnitRow(
                           produit: p,
                           fmt: _fmt,
                           baseUrl: widget.baseUrl,
@@ -242,6 +267,8 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                               widget.baseUrl != null ? _groupImageUrl(group, widget.baseUrl!, widget.imagesParDesignation) : null,
                           showValiderAction: widget.showValiderAction,
                           restrictedInfo: widget.restrictedInfo,
+                          hidePrixAchat: widget.hidePrixAchat,
+                          showFournisseur: widget.showFournisseur,
                           isAchatConfirmeVue: widget.isAchatConfirmeVue,
                           isAchatAttenteVue: widget.isAchatAttenteVue,
                           showMettreEnAchatAction: widget.showMettreEnAchatAction,
@@ -259,12 +286,58 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           selectionMode: widget.selectionMode,
                           checked: widget.selectedIds.contains(p.idProduits),
                           onCheckChanged: widget.onCheckChanged == null ? null : (v) => widget.onCheckChanged!(p.idProduits, v),
-                        )),
+                        ),
+                    ],
                   ],
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+extension on _ProduitGroupCardState {
+  /// Unités triées par fournisseur quand il est visible (ordre stable sinon).
+  List<ProduitModel> _itemsTries(ProduitGroup group) {
+    if (!widget.showFournisseur) return group.items;
+    final list = [...group.items];
+    list.sort((a, b) => ProduitGroup.fournisseurLabel(a).toLowerCase().compareTo(ProduitGroup.fournisseurLabel(b).toLowerCase()));
+    return list;
+  }
+
+  bool _debutFournisseur(ProduitGroup group, ProduitModel p) {
+    final list = _itemsTries(group);
+    final i = list.indexOf(p);
+    return i == 0 || ProduitGroup.fournisseurLabel(list[i - 1]) != ProduitGroup.fournisseurLabel(p);
+  }
+}
+
+class _FournisseurTitre extends StatelessWidget {
+  const _FournisseurTitre({required this.nom, required this.nombre});
+  final String nom;
+  final double nombre;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6, bottom: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.green.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(8),
+        border: const Border(left: BorderSide(color: AppColors.green, width: 3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.local_shipping_rounded, size: 13, color: AppColors.green),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(nom, style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.green), overflow: TextOverflow.ellipsis),
+          ),
+          Text(nombre.toStringAsFixed(0), style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -325,6 +398,8 @@ class _UnitRow extends StatelessWidget {
     required this.fallbackImageUrl,
     this.showValiderAction = false,
     this.restrictedInfo = false,
+    this.hidePrixAchat = false,
+    this.showFournisseur = false,
     this.isAchatConfirmeVue = false,
     this.isAchatAttenteVue = false,
     this.showMettreEnAchatAction = false,
@@ -349,6 +424,8 @@ class _UnitRow extends StatelessWidget {
   final String? fallbackImageUrl;
   final bool showValiderAction;
   final bool restrictedInfo;
+  final bool hidePrixAchat;
+  final bool showFournisseur;
   final bool isAchatConfirmeVue;
   final bool isAchatAttenteVue;
   final bool showMettreEnAchatAction;
@@ -381,6 +458,8 @@ class _UnitRow extends StatelessWidget {
                 imageUrlOverride: resolvedImage,
                 showPrintQr: true,
                 restrictedInfo: restrictedInfo,
+                hidePrixAchat: hidePrixAchat,
+                showFournisseur: showFournisseur,
               ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -502,6 +581,15 @@ class _UnitRow extends StatelessWidget {
                 ],
               ],
             ),
+            if (showFournisseur)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text(
+                  'Fournisseur : ${ProduitGroup.fournisseurLabel(produit)}',
+                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.green),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             if (produit.isReparationProduits && (produit.motifReparationProduits ?? '').trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 22, top: 2),

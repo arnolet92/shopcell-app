@@ -506,7 +506,11 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     // Comptes hors patron/gérant/magasinier : n'affichent que prix de vente,
     // modèle, n° de série, IMEI et batterie sur les articles (le rôle n'est
     // pas encore chargé -> restriction par défaut, par sécurité).
-    final restrictedInfo = !(_user?.hasFullArticleAccess ?? false);
+    final fullAccess = _user?.hasFullArticleAccess ?? false;
+    // Caissier : tous les détails sauf prix d'achat/revient/fournisseur.
+    final restrictedInfo = !(fullAccess || (_user?.isCaissier ?? false));
+    final hidePrixAchat = !fullAccess;
+    final showFournisseur = _user?.canSeeFournisseur ?? false;
 
     // Panneau "classeurs" (onglet "Achat confirmé") : comptage par bulk,
     // calculé côté client à partir de la liste déjà chargée (pas d'appel
@@ -596,7 +600,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
           nbArticles: achatFiltres.length,
           valeurStock: valeurStockAchat,
           valeurAchat: valeurAchatAchat,
-          restrictedInfo: restrictedInfo,
+          restrictedInfo: hidePrixAchat,
         ),
         body: SafeArea(
           bottom: false,
@@ -652,6 +656,8 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                       baseUrl: _baseUrl,
                       imagesParDesignation: _imagesParDesignation,
                       restrictedInfo: restrictedInfo,
+                      hidePrixAchat: hidePrixAchat,
+                      showFournisseur: showFournisseur,
                       isAchatConfirmeVue: true,
                       onEdit: _canEdit ? (p, imageUrl) => _openEdit(p, imageUrl) : null,
                       onEntrerEnStockAchat: _readOnly ? null : _entrerEnStockAchat,
@@ -735,7 +741,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     nbArticles: _produits.length,
                     valeurStock: valeurVente,
                     valeurAchat: valeurAchat,
-                    restrictedInfo: restrictedInfo,
+                    restrictedInfo: hidePrixAchat,
                   ),
                 ),
               ),
@@ -773,6 +779,8 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     imagesParDesignation: _imagesParDesignation,
                     showValiderAction: _vue == ProduitVue.attente,
                     restrictedInfo: restrictedInfo,
+                    hidePrixAchat: hidePrixAchat,
+                    showFournisseur: showFournisseur,
                     isAchatConfirmeVue: _vue == ProduitVue.achatConfirme,
                     isAchatAttenteVue: _vue == ProduitVue.achatAttente,
                     showMettreEnAchatAction: _vue == ProduitVue.attente && _user?.role == 'patron',
