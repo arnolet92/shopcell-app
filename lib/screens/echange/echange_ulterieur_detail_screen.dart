@@ -31,8 +31,20 @@ String _fmt(double v) {
 /// "Article en échange" que l'échange normal. Miroir mobile de
 /// `Echange/_ulterieur_detail` (web).
 class EchangeUlterieurDetailScreen extends StatefulWidget {
-  const EchangeUlterieurDetailScreen({super.key, required this.designation, required this.user});
+  const EchangeUlterieurDetailScreen({
+    super.key,
+    required this.designation,
+    required this.user,
+    this.repriseProduitsId,
+    this.prixActuelInitial,
+    this.origineReprise,
+  });
   final String designation;
+  /// Article déjà connu (sorti par échange ultérieur ou par Sortie) : c'est
+  /// cette fiche qui revient en stock.
+  final String? repriseProduitsId;
+  final double? prixActuelInitial;
+  final String? origineReprise;
   final UserModel user;
 
   @override
@@ -40,7 +52,7 @@ class EchangeUlterieurDetailScreen extends StatefulWidget {
 }
 
 class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScreen> {
-  final _prixActuelReprisCtrl = TextEditingController(text: '0');
+  late final _prixActuelReprisCtrl = TextEditingController(text: (widget.prixActuelInitial ?? 0).toStringAsFixed(0));
   final _produitSearchCtrl = TextEditingController();
   final _prixVenteCtrl = TextEditingController();
   final _motifCtrl = TextEditingController();
@@ -163,6 +175,7 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
       batterie: _isDefaut ? _batterieCtrl.text : null,
       user: widget.user,
       nonUpgrade: _nonUpgrade,
+      repriseProduitsId: widget.repriseProduitsId,
     );
     if (!mounted) return;
     if (result.success) {
@@ -305,7 +318,12 @@ class _EchangeUlterieurDetailScreenState extends State<EchangeUlterieurDetailScr
                     const Icon(Icons.inventory_2_rounded, size: 17, color: AppColors.accentLight),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text('Article repris : ${widget.designation}', style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textPrimary)),
+                      child: Text(
+                        widget.origineReprise != null
+                            ? 'Article repris : ${widget.designation}\n${widget.origineReprise} — cet article sera remis en stock'
+                            : 'Article repris : ${widget.designation}',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textPrimary),
+                      ),
                     ),
                   ],
                 ),

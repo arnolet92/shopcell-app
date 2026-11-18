@@ -26,8 +26,16 @@ class VenteLigne {
     required this.nomModel,
     required this.nomMarque,
     required this.nomLieu,
+    this.isReprise = false,
+    this.viaSortie = false,
+    this.produitsId = '',
   });
 
+  /// Article sorti du stock sans facture (échange ultérieur ou module
+  /// Sortie) : s'échange via l'écran "ultérieur", la fiche revient en stock.
+  final bool isReprise;
+  final bool viaSortie;
+  final String produitsId;
   final String idVentes;
   final String clientId;
   final String designation;
@@ -61,6 +69,9 @@ class VenteLigne {
       nomModel: s(j['nom_model']),
       nomMarque: s(j['nom_marque']),
       nomLieu: s(j['nom_lieu']),
+      isReprise: '${j['ulterieur'] ?? ''}' == '1',
+      viaSortie: '${j['via_sortie'] ?? ''}' == '1',
+      produitsId: '${j['produits_id'] ?? ''}',
     );
   }
 }
@@ -496,7 +507,7 @@ class EchangeService {
 
   Future<List<VenteLigne>> searchVentes(String arg) async {
     if (arg.trim().isEmpty) return [];
-    final data = await ApiClient.instance.post('echange_search_ventes', fields: {'arg': arg});
+    final data = await ApiClient.instance.post('echange_search_ventes', fields: {'arg': arg, 'avec_reprises': '1'});
     if (data is! List) return [];
     return data.whereType<Map>().map((e) => VenteLigne.fromJson(Map<String, dynamic>.from(e))).toList();
   }
@@ -620,6 +631,7 @@ class EchangeService {
     String? batterie,
     required UserModel user,
     bool nonUpgrade = false,
+    String? repriseProduitsId,
   }) async {
     if (isDefaut && (motifReparation == null || motifReparation.trim().isEmpty)) {
       return EchangeResult(success: false, message: 'Le motif de réparation est obligatoire pour un article retourné avec défaut.');
@@ -633,6 +645,9 @@ class EchangeService {
       'non_upgrade': nonUpgrade ? '1' : '0',
       'user': jsonEncode(user.mobPayload),
     };
+    if (repriseProduitsId != null && repriseProduitsId.isNotEmpty) {
+      fields['reprise_produits_id'] = repriseProduitsId;
+    }
     if (motifReparation != null && motifReparation.trim().isNotEmpty) {
       fields['motif_reparation'] = motifReparation.trim();
     }

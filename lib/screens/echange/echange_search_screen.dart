@@ -95,6 +95,20 @@ class _EchangeSearchScreenState extends State<EchangeSearchScreen> {
   }
 
   Future<void> _openDetail(VenteLigne ligne) async {
+    if (ligne.isReprise) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => EchangeUlterieurDetailScreen(
+            designation: ligne.designation,
+            user: widget.user,
+            repriseProduitsId: ligne.produitsId,
+            prixActuelInitial: ligne.prixVentes,
+            origineReprise: '${ligne.viaSortie ? 'Sortie de stock' : 'Sorti par échange ultérieur'} ${ligne.numeroFacture ?? ''}'.trim(),
+          ),
+        ),
+      );
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => EchangeDetailScreen(idVentes: ligne.idVentes, user: widget.user)),
     );
@@ -265,7 +279,13 @@ class _VenteLigneCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(ligne.designation, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                    if (ligne.numeroFacture != null) ...[
+                    if (ligne.isReprise) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        '${ligne.viaSortie ? 'Sortie de stock' : 'Sorti par échange ultérieur'} ${ligne.numeroFacture ?? ''}'.trim(),
+                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.orange),
+                      ),
+                    ] else if (ligne.numeroFacture != null) ...[
                       const SizedBox(height: 3),
                       Text('Facture ${ligne.numeroFacture}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
                     ],
