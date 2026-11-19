@@ -84,7 +84,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
         child: Column(
           children: [
             const SizedBox(height: 12),
-            const ShopCellMark(size: 48),
+            const ShopCellLogo(height: 46),
             const SizedBox(height: 14),
             Text(
               'Connexion au serveur',

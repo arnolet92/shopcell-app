@@ -83,14 +83,7 @@ class AppSidebar extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const ShopCellMark(size: 42),
-                const SizedBox(width: 12),
-                const ShopCellWordmark(fontSize: 20),
-              ],
-            ),
+            const ShopCellLogo(height: 50),
             const SizedBox(height: 26),
             const Divider(color: AppColors.border, height: 1),
             _UserTile(user: user),

@@ -251,15 +251,18 @@ class _LogoReveal extends StatelessWidget {
             scale: logoAppear.clamp(0.0, 1.15),
             child: Opacity(
               opacity: logoAppear.clamp(0.0, 1.0),
-              child: const ShopCellMark(size: 96),
+              child: const ShopCellLogo(height: 104),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           Opacity(
             opacity: textAppear.clamp(0.0, 1.0),
             child: Transform.translate(
               offset: Offset(0, 12 * (1 - textAppear.clamp(0.0, 1.0))),
-              child: const ShopCellWordmark(fontSize: 34),
+              child: Text(
+                'SMARTPHONES · ACCESSOIRES · RÉPARATION',
+                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 2.2, color: const Color(0xFF3DDC84)),
+              ),
             ),
           ),
           const SizedBox(height: 10),

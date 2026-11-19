@@ -57,3 +57,20 @@ class ShopCellWordmark extends StatelessWidget {
     );
   }
 }
+
+/// Vrai logo ShopCell (extrait de l'enseigne), version claire pour fond
+/// sombre : "SC" argent, "ShopCell" blanc, pomme et Android conservés.
+class ShopCellLogo extends StatelessWidget {
+  const ShopCellLogo({super.key, this.height = 56});
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/images/logo_shopcell_light.png',
+      height: height,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+    );
+  }
+}

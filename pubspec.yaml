@@ -1,7 +1,7 @@
 name: shopcell
 description: "ShopCell — Gestion de boutique premium"
 publish_to: 'none'
-version: 1.25.1+67
+version: 1.26.0+68
 
 environment:
   sdk: ^3.12.1
@@ -45,3 +45,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/
+    - assets/images/
