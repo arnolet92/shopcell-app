@@ -59,6 +59,9 @@ class UserModel {
   /// prix d'achat, prix de revient et fournisseur.
   bool get isCaissier => role == 'caissier';
 
+  /// Modification d'un client (menu Clients) : patron et magasinier.
+  bool get canEditClient => const {'patron', 'magasinier'}.contains(role);
+
   /// Fournisseurs (nombre par fournisseur, détails groupés par fournisseur) :
   /// patron, gérant et magasinier uniquement.
   bool get canSeeFournisseur => const {'patron', 'gerant', 'magasinier'}.contains(role);

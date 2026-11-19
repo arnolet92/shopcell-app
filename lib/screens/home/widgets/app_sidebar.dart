@@ -28,6 +28,7 @@ const sidebarItems = [
   SidebarItemData(icon: Icons.receipt_long_rounded, label: 'Factures payées'),
   SidebarItemData(icon: Icons.block_rounded, label: 'Factures annulées'),
   SidebarItemData(icon: Icons.outbox_rounded, label: 'Les sorties'),
+  SidebarItemData(icon: Icons.people_alt_rounded, label: 'Clients'),
   SidebarItemData(icon: Icons.settings_rounded, label: 'Paramètres'),
 ];
 

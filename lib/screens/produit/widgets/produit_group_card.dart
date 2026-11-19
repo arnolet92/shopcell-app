@@ -112,7 +112,8 @@ class ProduitGroupCard extends StatefulWidget {
 }
 
 class _ProduitGroupCardState extends State<ProduitGroupCard> {
-  late bool _expanded = widget.startExpanded;
+  // Détails visibles directement (sans tap) : groupes dépliés par défaut.
+  late bool _expanded = true;
 
   String _fmt(double v) {
     final s = v.round().toString();
@@ -581,6 +582,7 @@ class _UnitRow extends StatelessWidget {
                 ],
               ],
             ),
+            _InlineDetails(produit: produit, fmt: fmt, restrictedInfo: restrictedInfo, hidePrixAchat: hidePrixAchat),
             if (showFournisseur)
               Padding(
                 padding: const EdgeInsets.only(left: 22, top: 2),
@@ -610,6 +612,72 @@ class _UnitRow extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+/// Détails de l'unité affichés directement dans la liste (plus besoin
+/// d'ouvrir la fiche) — mêmes règles que `produit_detail_sheet.dart` :
+/// caissier sans prix d'achat / revient ni fournisseur ; comptes restreints :
+/// prix de vente, modèle, n° de série, IMEI, batterie.
+class _InlineDetails extends StatelessWidget {
+  const _InlineDetails({required this.produit, required this.fmt, required this.restrictedInfo, required this.hidePrixAchat});
+  final ProduitModel produit;
+  final String Function(double) fmt;
+  final bool restrictedInfo;
+  final bool hidePrixAchat;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = produit;
+    final full = !restrictedInfo && !hidePrixAchat;
+    final infos = <(IconData, String)>[
+      if (full) (Icons.shopping_bag_outlined, "Achat : ${fmt(p.prixAchats)} Ar"),
+      if (full) (Icons.calculate_outlined, 'Revient : ${fmt(p.prixRevient)} Ar'),
+      (Icons.inventory_2_outlined, 'Stock : ${p.totalStock.toStringAsFixed(0)}'),
+      if (!restrictedInfo && p.codeProduits != null) (Icons.qr_code_rounded, 'Code : ${p.codeProduits}'),
+      if (!restrictedInfo && p.nomSousType != null) (Icons.layers_rounded, p.nomSousType!),
+      if (p.nomModel != null) (Icons.phone_android_rounded, p.nomModel!),
+      if (!restrictedInfo && p.nomSysteme != null) (Icons.settings_suggest_rounded, p.nomSysteme!),
+      if (!restrictedInfo && p.nomMarque != null) (Icons.memory_rounded, p.nomMarque!),
+      if (!restrictedInfo && p.nomTypePiece != null) (Icons.palette_rounded, p.nomTypePiece!),
+      if (p.nomSousCategoriePiece != null) (Icons.battery_full_rounded, p.nomSousCategoriePiece!),
+      if (!restrictedInfo && p.nomCarton != null) (Icons.inventory_rounded, p.nomCarton!),
+      if (!restrictedInfo && p.nomDefaut != null) (Icons.report_gmailerrorred_rounded, p.nomDefaut!),
+      if (!restrictedInfo && p.nomLieu != null) (Icons.place_rounded, p.nomLieu!),
+      if (p.imei1 != null) (Icons.fingerprint_rounded, 'IMEI1 : ${p.imei1}'),
+      if (p.imei2 != null) (Icons.fingerprint_rounded, 'IMEI2 : ${p.imei2}'),
+    ];
+    final desc = (!restrictedInfo && (p.description ?? '').trim().isNotEmpty) ? p.description!.trim() : null;
+    return Padding(
+      padding: const EdgeInsets.only(left: 22, top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 5,
+            children: [
+              for (final (icon, label) in infos)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(color: AppColors.accentGlow, borderRadius: BorderRadius.circular(14)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 11, color: AppColors.accentLight),
+                    const SizedBox(width: 4),
+                    Text(label, style: GoogleFonts.inter(fontSize: 10.5, color: AppColors.textPrimary)),
+                  ]),
+                ),
+            ],
+          ),
+          if (desc != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(desc, style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary, height: 1.3)),
+            ),
+        ],
       ),
     );
   }

@@ -9,6 +9,7 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/facture_service.dart';
 import '../auth/login_screen.dart';
+import '../client/client_list_screen.dart';
 import '../credit/credit_clients_screen.dart';
 import '../sortie/sortie_list_screen.dart';
 import '../echange/echange_reservation_list_screen.dart';
@@ -31,7 +32,8 @@ const _reservationsIndex = 6;
 const _facturesPayeesIndex = 7;
 const _facturesAnnuleesIndex = 8;
 const _sortiesIndex = 9;
-const _parametresIndex = 10;
+const _clientsIndex = 10;
+const _parametresIndex = 11;
 // "Annulation en attente" (patron uniquement) est toujours ajoutée en
 // DERNIÈRE position par sidebarItemsFor() — voir app_sidebar.dart — donc son
 // index est simplement la longueur de la liste de base, jamais un index fixe
@@ -120,6 +122,12 @@ class _HomeShellState extends State<HomeShell> {
     if (index == _sortiesIndex) {
       if (_user != null) {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => SortieListScreen(user: _user!)));
+      }
+      return;
+    }
+    if (index == _clientsIndex) {
+      if (_user != null) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => ClientListScreen(user: _user!)));
       }
       return;
     }
