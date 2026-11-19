@@ -8,7 +8,7 @@ import '../models/produit_model.dart';
 /// `Produit::lst_reparation()` (articles actuellement en réparation),
 /// `Produit::lst_achat_confirme()`/`lst_achat_attente()` (lots "Mettre en
 /// achat" du formulaire de création, confirmés ou non).
-enum ProduitVue { tous, attente, vente, reparation, apresEchange, achatConfirme, achatAttente }
+enum ProduitVue { tous, attente, vente, reparation, apresEchange, achatConfirme, achatAttente, enquete }
 
 class SaveProduitResult {
   SaveProduitResult({required this.success, this.message, this.idProduits});
@@ -39,6 +39,7 @@ class ProduitService {
     String? idBatterie,
     String? idCarton,
     String? idDefaut,
+    String? idUser,
   }) async {
     final fields = <String, String>{
       'vue': switch (vue) {
@@ -49,8 +50,10 @@ class ProduitService {
         ProduitVue.apresEchange => 'apres_echange',
         ProduitVue.achatConfirme => 'achat_confirme',
         ProduitVue.achatAttente => 'achat_attente',
+        ProduitVue.enquete => 'enquete',
       },
     };
+    if (idUser != null && idUser.isNotEmpty) fields['id_user'] = idUser;
     if (recherche != null && recherche.trim().isNotEmpty) fields['arg'] = recherche.trim();
     if (idFamille != null && idFamille.isNotEmpty) fields['id_sous_type_produit'] = idFamille;
     if (idMarque != null && idMarque.isNotEmpty) fields['id_marque'] = idMarque;
@@ -212,6 +215,22 @@ class ProduitService {
     final error = data['error'] == true;
     return SaveProduitResult(success: !error, message: data['msg']?.toString());
   }
+
+  /// Articles en enquête (patron seul, rôle revérifié côté serveur via id_user).
+  Future<SaveProduitResult> _enquete(String action, Map<String, String> fields) async {
+    final data = await ApiClient.instance.post(action, fields: fields);
+    if (data is! Map) return SaveProduitResult(success: false, message: 'Réponse du serveur invalide.');
+    return SaveProduitResult(success: data['error'] != true, message: data['msg']?.toString());
+  }
+
+  Future<SaveProduitResult> miseEnEnquete({required String idProduits, required String motif, required String idUser}) =>
+      _enquete('mise_en_enquete', {'id_produits': idProduits, 'motif': motif, 'id_user': idUser});
+
+  Future<SaveProduitResult> remettreStockEnquete({required String idProduits, required String idUser}) =>
+      _enquete('remettre_stock_enquete', {'id_produits': idProduits, 'id_user': idUser});
+
+  Future<SaveProduitResult> supprimerEnquete({required String idProduits, required String motif, required String idUser}) =>
+      _enquete('supprimer_enquete', {'id_produits': idProduits, 'motif': motif, 'id_user': idUser});
 
   /// Termine la réparation d'un article — équivalent de `Produit::save_terminer_reparation()`.
   Future<SaveProduitResult> terminerReparation({required String idProduits, required String motif}) async {

@@ -44,6 +44,9 @@ class ProduitGroupCard extends StatefulWidget {
     this.onAddToCart,
     this.onTapUnit,
     this.onRemettreEnStock,
+    this.onMiseEnEnquete,
+    this.onRemettreStockEnquete,
+    this.onSupprimerEnquete,
     this.onEntrerEnStockAchat,
     this.onConfirmerAchat,
     this.onMettreEnAchat,
@@ -84,6 +87,9 @@ class ProduitGroupCard extends StatefulWidget {
   /// Onglet "Après échange" : remet l'article dans le circuit normal
   /// (produit_apres_echange = 0).
   final void Function(ProduitModel produit)? onRemettreEnStock;
+  final void Function(ProduitModel produit)? onMiseEnEnquete;
+  final void Function(ProduitModel produit)? onRemettreStockEnquete;
+  final void Function(ProduitModel produit)? onSupprimerEnquete;
   /// Ajout rapide au ticket (panier de vente) depuis "Gestion d'article" —
   /// même principe que le bouton "ajoutez au ticket" de `tabproduit2.php`
   /// côté web (quantité 1, ajout immédiat).
@@ -281,6 +287,9 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                           onAddToCart: widget.onAddToCart,
                           onTapUnit: widget.onTapUnit,
                           onRemettreEnStock: widget.onRemettreEnStock,
+                          onMiseEnEnquete: widget.onMiseEnEnquete,
+                          onRemettreStockEnquete: widget.onRemettreStockEnquete,
+                          onSupprimerEnquete: widget.onSupprimerEnquete,
                           onEntrerEnStockAchat: widget.onEntrerEnStockAchat,
                           onConfirmerAchat: widget.onConfirmerAchat,
                           onMettreEnAchat: widget.onMettreEnAchat,
@@ -412,6 +421,9 @@ class _UnitRow extends StatelessWidget {
     this.onAddToCart,
     this.onTapUnit,
     this.onRemettreEnStock,
+    this.onMiseEnEnquete,
+    this.onRemettreStockEnquete,
+    this.onSupprimerEnquete,
     this.onEntrerEnStockAchat,
     this.onConfirmerAchat,
     this.onMettreEnAchat,
@@ -438,6 +450,9 @@ class _UnitRow extends StatelessWidget {
   final void Function(ProduitModel produit)? onAddToCart;
   final void Function(ProduitModel produit, String? imageUrl)? onTapUnit;
   final void Function(ProduitModel produit)? onRemettreEnStock;
+  final void Function(ProduitModel produit)? onMiseEnEnquete;
+  final void Function(ProduitModel produit)? onRemettreStockEnquete;
+  final void Function(ProduitModel produit)? onSupprimerEnquete;
   final void Function(ProduitModel produit)? onEntrerEnStockAchat;
   final void Function(ProduitModel produit)? onConfirmerAchat;
   final void Function(ProduitModel produit)? onMettreEnAchat;
@@ -519,7 +534,20 @@ class _UnitRow extends StatelessWidget {
                   '${fmt(produit.prixUnitaire)} Ar',
                   style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                 ),
-                if (produit.produitApresEchange && onRemettreEnStock != null)
+                if (produit.isEnquete) ...[
+                  if (onRemettreStockEnquete != null)
+                    IconButton(
+                      icon: const Icon(Icons.undo_rounded, size: 18, color: AppColors.green),
+                      tooltip: 'Remettre en stock',
+                      onPressed: () => onRemettreStockEnquete!(produit),
+                    ),
+                  if (onSupprimerEnquete != null)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.red),
+                      tooltip: 'Supprimer',
+                      onPressed: () => onSupprimerEnquete!(produit),
+                    ),
+                ] else if (produit.produitApresEchange && onRemettreEnStock != null)
                   IconButton(
                     icon: const Icon(Icons.undo_rounded, size: 18, color: Color(0xFF8B5CF6)),
                     tooltip: 'Remettre en stock',
@@ -568,6 +596,12 @@ class _UnitRow extends StatelessWidget {
                           ? (onTerminerReparation != null ? () => onTerminerReparation!(produit) : null)
                           : (onMiseEnReparation != null ? () => onMiseEnReparation!(produit) : null),
                     ),
+                  if (onMiseEnEnquete != null)
+                    IconButton(
+                      icon: const Icon(Icons.policy_outlined, size: 17, color: Color(0xFF38BDF8)),
+                      tooltip: 'Mise en enquête',
+                      onPressed: () => onMiseEnEnquete!(produit),
+                    ),
                   if (onEdit != null)
                     IconButton(
                       icon: const Icon(Icons.edit_rounded, size: 16, color: AppColors.textMuted),
@@ -589,6 +623,16 @@ class _UnitRow extends StatelessWidget {
                 child: Text(
                   'Fournisseur : ${ProduitGroup.fournisseurLabel(produit)}',
                   style: GoogleFonts.inter(fontSize: 11, color: AppColors.green),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            if (produit.isEnquete && (produit.motifEnquete ?? '').trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 2),
+                child: Text(
+                  'Enquête : ${produit.motifEnquete}',
+                  style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF38BDF8), fontStyle: FontStyle.italic),
+                  maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

@@ -299,6 +299,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
         idBatterie: _selection.batterieId,
         idCarton: _selection.cartonId,
         idDefaut: _selection.defautId,
+        idUser: _user?.idUser,
       );
       if (!mounted) return;
       setState(() {
@@ -376,7 +377,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
     }
   }
 
-  Future<String?> _promptMotif({required String title, required String confirmLabel, String? initial}) {
+  Future<String?> _promptMotif({required String title, required String confirmLabel, String? initial, String hint = 'Défaut / motif...'}) {
     final controller = TextEditingController(text: initial ?? '');
     return showDialog<String>(
       context: context,
@@ -389,7 +390,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
           maxLines: 3,
           style: const TextStyle(color: AppColors.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Défaut / motif...',
+            hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textMuted),
             enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: AppColors.borderAccent), borderRadius: BorderRadius.circular(10)),
@@ -418,6 +419,48 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
       AppDataCache.instance.invalidate(CacheDomain.produits);
       _reload();
     }
+  }
+
+  bool get _isPatron => _user?.role == 'patron';
+
+  Future<void> _apresEnquete(SaveProduitResult result) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? (result.success ? 'Opération effectuée.' : 'Échec.'))),
+    );
+    if (result.success) {
+      AppDataCache.instance.invalidate(CacheDomain.produits);
+      _reload();
+    }
+  }
+
+  // Articles en enquête : réservé au patron (revérifié côté serveur).
+  Future<void> _miseEnEnquete(ProduitModel p) async {
+    final motif = await _promptMotif(title: 'Mise en enquête', confirmLabel: 'Mettre en enquête', hint: "Motif de l'enquête (obligatoire)");
+    if (motif == null || !mounted) return;
+    if (motif.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le motif est obligatoire.')));
+      return;
+    }
+    await _apresEnquete(await ProduitService.instance.miseEnEnquete(idProduits: p.idProduits, motif: motif, idUser: _user!.idUser));
+  }
+
+  Future<void> _remettreStockEnquete(ProduitModel p) async {
+    final ok = await _confirmDialog('Remettre en stock ?', "Cet article sortira de l'enquête et redeviendra visible et vendable.");
+    if (!ok || !mounted) return;
+    await _apresEnquete(await ProduitService.instance.remettreStockEnquete(idProduits: p.idProduits, idUser: _user!.idUser));
+  }
+
+  Future<void> _supprimerEnquete(ProduitModel p) async {
+    final motif = await _promptMotif(title: "Supprimer l'article", confirmLabel: 'Continuer', hint: 'Motif de la suppression (obligatoire)');
+    if (motif == null || !mounted) return;
+    if (motif.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Le motif de la suppression est obligatoire.')));
+      return;
+    }
+    final ok = await _confirmDialog('Supprimer définitivement ?', "${p.designation}\nL'article sera retiré du stock. Le motif est conservé.");
+    if (!ok || !mounted) return;
+    await _apresEnquete(await ProduitService.instance.supprimerEnquete(idProduits: p.idProduits, motif: motif, idUser: _user!.idUser));
   }
 
   Future<void> _terminerReparation(ProduitModel p) async {
@@ -617,7 +660,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onMenu: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
                 ),
-                SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly)),
+                SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly, patron: _isPatron)),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 if (isAchatBulkNomme && _canOrganizeBulk) ...[
                   SliverToBoxAdapter(
@@ -732,7 +775,7 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                   ),
                 ),
               ),
-              SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly)),
+              SliverToBoxAdapter(child: _VueTabs(vue: _vue, onChanged: _onVueChanged, stockOnly: _readOnly, patron: _isPatron)),
               const SliverToBoxAdapter(child: SizedBox(height: 10)),
               SliverToBoxAdapter(
                 child: Padding(
@@ -791,6 +834,9 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
                     onTerminerReparation: _readOnly ? null : _terminerReparation,
                     onAddToCart: _readOnly ? null : _addToCart,
                     onRemettreEnStock: _readOnly ? null : _remettreEnStock,
+                    onMiseEnEnquete: (_isPatron && _vue != ProduitVue.enquete) ? _miseEnEnquete : null,
+                    onRemettreStockEnquete: _isPatron ? _remettreStockEnquete : null,
+                    onSupprimerEnquete: _isPatron ? _supprimerEnquete : null,
                     onEntrerEnStockAchat: _readOnly ? null : _entrerEnStockAchat,
                     onConfirmerAchat: _readOnly ? null : _confirmerAchat,
                     onMettreEnAchat: _readOnly ? null : _mettreEnAchatDepuisAttente,
@@ -806,10 +852,11 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 }
 
 class _VueTabs extends StatelessWidget {
-  const _VueTabs({required this.vue, required this.onChanged, this.stockOnly = false});
+  const _VueTabs({required this.vue, required this.onChanged, this.stockOnly = false, this.patron = false});
   final ProduitVue vue;
   /// Compte "stock" : seulement les 4 pages autorisées (comme côté web).
   final bool stockOnly;
+  final bool patron;
   final ValueChanged<ProduitVue> onChanged;
 
   @override
@@ -847,6 +894,7 @@ class _VueTabs extends StatelessWidget {
           chip(ProduitVue.reparation, 'Article en réparation', Icons.build_rounded),
           if (!stockOnly) chip(ProduitVue.achatConfirme, 'Achat confirmé', Icons.check_circle_rounded),
           if (!stockOnly) chip(ProduitVue.achatAttente, 'Achat en attente', Icons.hourglass_bottom_rounded),
+          if (patron) chip(ProduitVue.enquete, 'Articles en enquête', Icons.policy_rounded),
         ],
       ),
     );

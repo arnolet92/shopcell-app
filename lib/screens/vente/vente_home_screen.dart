@@ -122,7 +122,7 @@ class _VenteHomeScreenState extends State<VenteHomeScreen> {
   /// et 2, numéro de série, capacité) — voir `Produits::search_prod()`.
   List<ProduitModel> get _filtered {
     // Les articles en réservation (échange en réservation) ne se vendent pas.
-    final vendables = _produits.where((p) => !p.isEchangeReservation);
+    final vendables = _produits.where((p) => !p.isEchangeReservation && !p.isEnquete);
     final q = _searchController.text.trim().toLowerCase();
     if (q.isEmpty) return vendables.toList();
     bool matches(String? field) => field != null && field.toLowerCase().contains(q);

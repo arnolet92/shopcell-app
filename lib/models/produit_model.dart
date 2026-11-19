@@ -32,6 +32,9 @@ class ProduitModel {
     required this.imgProduit,
     this.isReparationProduits = false,
     this.isEchangeReservation = false,
+    this.isEnquete = false,
+    this.motifEnquete,
+    this.enqueteAt,
     this.motifReparationProduits,
     this.isRepareeProduits = false,
     this.produitApresEchange = false,
@@ -68,6 +71,10 @@ class ProduitModel {
   /// Article bloqué par un échange en réservation (ancien ou nouveau) :
   /// jamais vendable tant que la réservation n'est ni validée ni annulée.
   final bool isEchangeReservation;
+  /// Article mis en enquête par le patron : hors listes et hors vente.
+  final bool isEnquete;
+  final String? motifEnquete;
+  final String? enqueteAt;
   final String? motifReparationProduits;
   final bool isRepareeProduits; // a déjà été réparé (historique)
   /// Repris en échange, en attente de remise en stock explicite (voir
@@ -128,6 +135,9 @@ class ProduitModel {
       imgProduit: _s(json['img_produit']),
       isReparationProduits: _d(json['isreparation_produits']) == 1,
       isEchangeReservation: _d(json['is_echange_reservation']) == 1,
+      isEnquete: _d(json['is_enquete']) == 1,
+      motifEnquete: _s(json['motif_enquete']),
+      enqueteAt: _s(json['enquete_at']),
       motifReparationProduits: _s(json['motif_reparation_produits']),
       isRepareeProduits: _d(json['isreparee_produits']) == 1,
       produitApresEchange: _d(json['produit_apres_echange']) == 1,
