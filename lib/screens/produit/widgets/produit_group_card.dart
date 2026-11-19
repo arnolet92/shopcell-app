@@ -112,8 +112,8 @@ class ProduitGroupCard extends StatefulWidget {
 }
 
 class _ProduitGroupCardState extends State<ProduitGroupCard> {
-  // Détails visibles directement (sans tap) : groupes dépliés par défaut.
-  late bool _expanded = true;
+  // Entêtes seules d'abord ; un tap déplie la liste avec les détails.
+  late bool _expanded = widget.startExpanded;
 
   String _fmt(double v) {
     final s = v.round().toString();
