@@ -54,7 +54,9 @@ class _QrSellScanScreenState extends State<QrSellScanScreen> with SingleTickerPr
       _notFoundCode = null;
     });
 
-    final produit = await VenteService.instance.findProduitById(code);
+    final trouve = await VenteService.instance.findProduitById(code);
+    // Article en réservation : non vendable (traité comme introuvable).
+    final produit = (trouve != null && trouve.isEchangeReservation) ? null : trouve;
 
     if (!mounted) return;
 

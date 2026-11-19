@@ -31,6 +31,7 @@ class ProduitModel {
     required this.nomSousType,
     required this.imgProduit,
     this.isReparationProduits = false,
+    this.isEchangeReservation = false,
     this.motifReparationProduits,
     this.isRepareeProduits = false,
     this.produitApresEchange = false,
@@ -64,6 +65,9 @@ class ProduitModel {
   final String? nomSousType; // Famille
   final String? imgProduit;
   final bool isReparationProduits; // actuellement en réparation
+  /// Article bloqué par un échange en réservation (ancien ou nouveau) :
+  /// jamais vendable tant que la réservation n'est ni validée ni annulée.
+  final bool isEchangeReservation;
   final String? motifReparationProduits;
   final bool isRepareeProduits; // a déjà été réparé (historique)
   /// Repris en échange, en attente de remise en stock explicite (voir
@@ -123,6 +127,7 @@ class ProduitModel {
       nomSousType: _s(json['nom_sous_type']),
       imgProduit: _s(json['img_produit']),
       isReparationProduits: _d(json['isreparation_produits']) == 1,
+      isEchangeReservation: _d(json['is_echange_reservation']) == 1,
       motifReparationProduits: _s(json['motif_reparation_produits']),
       isRepareeProduits: _d(json['isreparee_produits']) == 1,
       produitApresEchange: _d(json['produit_apres_echange']) == 1,
