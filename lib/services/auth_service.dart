@@ -9,11 +9,48 @@ import '../models/user_model.dart';
 /// base locale (sqflite) et on le renvoie tel quel dans le corps des appels
 /// qui en ont besoin, comme le fait déjà l'app mobile "officielle" décrite
 /// dans le contrôleur (`$this->input->post("user")` un peu partout dans Mob.php).
+/// Compte affiché sur l'écran de connexion (Mob/users_login) : identifiant,
+/// pseudo et photo seulement (ni rôle ni mot de passe).
+class LoginProfile {
+  LoginProfile({required this.idUser, required this.pseudo, this.photo});
+  final String idUser;
+  final String pseudo;
+  final String? photo;
+
+  factory LoginProfile.fromJson(Map<String, dynamic> j) {
+    final photo = j['photo']?.toString().trim();
+    return LoginProfile(
+      idUser: '${j['id_user'] ?? ''}',
+      pseudo: '${j['pseudo'] ?? ''}'.trim(),
+      photo: (photo == null || photo.isEmpty || photo == 'null') ? null : photo,
+    );
+  }
+
+  String get initiales {
+    final p = pseudo.trim();
+    if (p.isEmpty) return '?';
+    return (p.length >= 2 ? p.substring(0, 2) : p).toUpperCase();
+  }
+}
+
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
   UserModel? _current;
+
+  /// Comptes actifs à toucher sur l'écran de connexion. Liste vide si le
+  /// serveur ne répond pas (ou ancienne version sans Mob/users_login) :
+  /// l'écran affiche alors directement le formulaire pseudo / mot de passe.
+  Future<List<LoginProfile>> profils() async {
+    try {
+      final data = await ApiClient.instance.post('users_login');
+      if (data is! List) return [];
+      return data.whereType<Map>().map((e) => LoginProfile.fromJson(Map<String, dynamic>.from(e))).where((p) => p.pseudo.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
 
   Future<UserModel?> get currentUser async {
     if (_current != null) return _current;
@@ -25,10 +62,7 @@ class AuthService {
 
   Future<LoginResult> login({required String pseudo, required String password}) async {
     try {
-      final data = await ApiClient.instance.post('login', fields: {
-        'pseudo': pseudo,
-        'password': password,
-      });
+      final data = await ApiClient.instance.post('login', fields: {'pseudo': pseudo, 'password': password});
 
       if (data is! Map) {
         return LoginResult(success: false, message: 'Réponse du serveur invalide.');
