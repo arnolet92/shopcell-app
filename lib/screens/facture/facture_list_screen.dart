@@ -11,6 +11,8 @@ import 'facture_detail_screen.dart';
 import 'facture_echange_detail_screen.dart';
 
 const Color _echangeColor = Color(0xFFA78BFA);
+const Color _echangeExtColor = Color(0xFF38BDF8);
+const Color _reprisColor = Color(0xFFF59E0B);
 
 String _fmt(double v) {
   final s = v.round().toString();
@@ -355,15 +357,21 @@ class _FactureCard extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: _echangeColor.withValues(alpha: .15),
+                      color: (item.isEchangeExterieur ? _echangeExtColor : _echangeColor).withValues(alpha: .15),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _echangeColor.withValues(alpha: .4)),
+                      border: Border.all(color: (item.isEchangeExterieur ? _echangeExtColor : _echangeColor).withValues(alpha: .4)),
                     ),
-                    child: Text('Échange', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: _echangeColor)),
+                    child: Text(item.typeEchangeLabel,
+                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: item.isEchangeExterieur ? _echangeExtColor : _echangeColor)),
                   ),
                 Text(_fmt(item.montant), style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: item.isEchange ? _echangeColor : accent)),
               ]),
-              if (item.articlesApercu != null) ...[
+              if (item.isEchange) ...[
+                const SizedBox(height: 6),
+                _EchangeLigne(tag: 'REPRIS', color: _reprisColor, texte: item.articleRepris ?? '-'),
+                const SizedBox(height: 3),
+                _EchangeLigne(tag: 'REMIS', color: AppColors.green, texte: item.articleRemis ?? '-'),
+              ] else if (item.articlesApercu != null) ...[
                 const SizedBox(height: 4),
                 Text(item.articlesApercu!, style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
@@ -396,5 +404,34 @@ class _FactureCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Ligne "REPRIS / REMIS" d'une carte d'échange (liste des factures payées).
+class _EchangeLigne extends StatelessWidget {
+  const _EchangeLigne({required this.tag, required this.color, required this.texte});
+  final String tag;
+  final Color color;
+  final String texte;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Container(
+        width: 54,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .14),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: .4)),
+        ),
+        child: Text(tag, style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800, color: color, letterSpacing: .04)),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(texte, style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+    ]);
   }
 }

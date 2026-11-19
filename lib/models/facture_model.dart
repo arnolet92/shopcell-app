@@ -73,6 +73,24 @@ class FactureListItem {
 
   String get contactAffiche => _s(telephone) ?? _s(telephoneVisiteur) ?? '-';
 
+  /// Échange "extérieur" (isulterieur=1) : l'article repris ne vient pas
+  /// d'une vente de la boutique. Sinon échange normal.
+  bool get isEchangeExterieur => isEchange && '${echangeRaw?['isulterieur'] ?? '0'}' == '1';
+  String get typeEchangeLabel => isEchangeExterieur ? 'Échange extérieur' : 'Échange normal';
+
+  String? _article(String prefix) {
+    final j = echangeRaw;
+    if (j == null) return null;
+    final d = _s(j['${prefix}designation']);
+    final sn = _s(j['${prefix}num_serie']);
+    if (d == null && sn == null) return null;
+    return sn == null ? d : '${d ?? ''} ($sn)'.trim();
+  }
+
+  /// Article repris (entré en stock) et article remis (sorti du stock).
+  String? get articleRepris => _article('old_');
+  String? get articleRemis => _article('new_');
+
   factory FactureListItem.fromJson(Map<String, dynamic> j, {required String dateField}) {
     final isEchange = '${j['is_echange'] ?? '0'}' == '1';
     return FactureListItem(

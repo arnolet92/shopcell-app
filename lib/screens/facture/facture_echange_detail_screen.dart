@@ -7,6 +7,8 @@ import '../../models/user_model.dart';
 import '../../services/echange_print.dart';
 
 const Color _echangeColor = Color(0xFFA78BFA);
+const Color _echangeExtColor = Color(0xFF38BDF8);
+const Color _reprisColor = Color(0xFFF59E0B);
 
 String _fmt(double v) {
   final s = v.round().toString();
@@ -34,11 +36,11 @@ String _fmtDate(String? iso) {
 }
 
 /// Détail d'un ÉCHANGE affiché dans "Factures payées" — miroir mobile de
-/// `_echange_detail_row.php` (web) : uniquement l'article REMIS (sortie du
-/// stock) avec ses caractéristiques, et volontairement AUCUNE option
-/// d'annulation (l'annulation d'un échange se fait depuis l'historique
-/// d'échange). Le bouton "Imprimer" imprime le ticket/A4 d'ÉCHANGE (article
-/// remis en ligne principale, article retourné en bas), pas une facture.
+/// `_echange_detail_row.php` (web) : type d'échange (normal / extérieur),
+/// article REPRIS (entré en stock) et article REMIS (sorti du stock) avec
+/// leurs caractéristiques, et volontairement AUCUNE option d'annulation
+/// (l'annulation d'un échange se fait depuis l'historique d'échange). Le
+/// bouton "Imprimer" imprime le ticket/A4 d'ÉCHANGE, pas une facture.
 class FactureEchangeDetailScreen extends StatefulWidget {
   const FactureEchangeDetailScreen({super.key, required this.item, required this.user});
   final FactureListItem item;
@@ -69,20 +71,35 @@ class _FactureEchangeDetailScreenState extends State<FactureEchangeDetailScreen>
     }
   }
 
+  List<MapEntry<String, String>> _champs(String p, {bool lieu = false}) {
+    final j = _j;
+    final m = <String, String>{
+      '${p}num_serie': 'N° série',
+      '${p}nom_model': 'Modèle',
+      '${p}nom_marque': 'Capacité',
+      '${p}nom_type_piece': 'Couleur',
+      '${p}nom_batterie': 'Batterie',
+      if (lieu) '${p}nom_lieu': 'Lieu',
+      '${p}imei1': 'IMEI 1',
+      '${p}imei2': 'IMEI 2',
+    };
+    return [
+      for (final e in m.entries)
+        if (_s(j[e.key]) != null) MapEntry(e.value, _s(j[e.key])!),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final j = _j;
-    final champs = <MapEntry<String, String>>[
-      if (_s(j['new_num_serie']) != null) MapEntry('N° série', _s(j['new_num_serie'])!),
-      if (_s(j['new_nom_model']) != null) MapEntry('Modèle', _s(j['new_nom_model'])!),
-      if (_s(j['new_nom_marque']) != null) MapEntry('Capacité', _s(j['new_nom_marque'])!),
-      if (_s(j['new_nom_type_piece']) != null) MapEntry('Couleur', _s(j['new_nom_type_piece'])!),
-      if (_s(j['new_nom_batterie']) != null) MapEntry('Batterie', _s(j['new_nom_batterie'])!),
-      if (_s(j['new_nom_lieu']) != null) MapEntry('Lieu', _s(j['new_nom_lieu'])!),
-      if (_s(j['new_imei1']) != null) MapEntry('IMEI 1', _s(j['new_imei1'])!),
-      if (_s(j['new_imei2']) != null) MapEntry('IMEI 2', _s(j['new_imei2'])!),
-    ];
+    final ext = widget.item.isEchangeExterieur;
+    final typeColor = ext ? _echangeExtColor : _echangeColor;
     final qte = _d(j['qte']) == 0 ? 1.0 : _d(j['qte']);
+    final repris = _champs('old_');
+    final defaut = _s(j['old_motif_reparation']);
+    if (defaut != null) repris.add(MapEntry('Défaut constaté', defaut));
+    final factureOrigine = _s(j['numero_factures_client']);
+    final numero = widget.item.idEchange ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.bgDeep,
@@ -101,65 +118,59 @@ class _FactureEchangeDetailScreenState extends State<FactureEchangeDetailScreen>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            Row(children: [
-              const Icon(Icons.swap_horiz_rounded, size: 16, color: _echangeColor),
-              const SizedBox(width: 6),
-              Text('ÉCHANGE N°${widget.item.idEchange ?? ''}',
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: _echangeColor, letterSpacing: .04)),
-            ]),
-            const SizedBox(height: 4),
-            Text('Article remis', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
-            const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.bgCard,
+                color: typeColor.withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _echangeColor.withValues(alpha: .4)),
+                border: Border.all(color: typeColor.withValues(alpha: .4)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(_s(j['new_designation']) ?? 'Article',
-                          style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              child: Row(children: [
+                Icon(ext ? Icons.login_rounded : Icons.swap_horiz_rounded, size: 20, color: typeColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(widget.item.typeEchangeLabel, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w800, color: typeColor)),
+                    const SizedBox(height: 2),
+                    Text(
+                      ext
+                          ? "Article repris venant de l'extérieur (non vendu par la boutique) · N°$numero"
+                          : "Article repris vendu par la boutique${factureOrigine != null ? ' (facture $factureOrigine)' : ''} · N°$numero",
+                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.textMuted),
                     ),
-                    Text('x${qte.toStringAsFixed(qte == qte.roundToDouble() ? 0 : 2)}',
-                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.accentLight)),
                   ]),
-                  if (champs.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 4,
-                      children: champs
-                          .map((c) => RichText(
-                                text: TextSpan(
-                                  style: GoogleFonts.inter(fontSize: 11.5),
-                                  children: [
-                                    TextSpan(text: '${c.key}: ', style: const TextStyle(color: AppColors.textMuted)),
-                                    TextSpan(text: c.value, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                              ))
-                          .toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('Supplément : ${_fmt(_d(j['prix_ajoute']))}', style: GoogleFonts.inter(fontSize: 11.5, color: AppColors.textMuted)),
-                    Text(_fmt(widget.item.montant), style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.green)),
-                  ]),
-                ],
-              ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            _ArticleCard(
+              titre: 'ARTICLE REPRIS (ENTRÉ EN STOCK)',
+              icon: Icons.south_rounded,
+              color: _reprisColor,
+              designation: _s(j['old_designation']) ?? '-',
+              qte: qte,
+              champs: repris,
+              pied: [MapEntry('Valeur de reprise', _fmt(_d(j['old_prix_ventes'])))],
+            ),
+            const SizedBox(height: 12),
+            _ArticleCard(
+              titre: 'ARTICLE REMIS (SORTI DU STOCK)',
+              icon: Icons.north_rounded,
+              color: AppColors.green,
+              designation: _s(j['new_designation']) ?? '-',
+              qte: qte,
+              champs: _champs('new_', lieu: true),
+              pied: [
+                MapEntry("Prix de l'article", _fmt(_d(j['new_prix_unitaire']))),
+                MapEntry('Supplément', _fmt(_d(j['prix_ajoute']))),
+              ],
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(color: AppColors.bgCard, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.border)),
               child: Column(children: [
-                _row('Montant de l\'échange', _fmt(widget.item.montant), AppColors.textPrimary, bold: true),
+                _row("Montant de l'échange", _fmt(widget.item.montant), AppColors.textPrimary, bold: true),
                 _row('Date', _fmtDate(widget.item.dateReference), AppColors.textSecondary),
                 if (widget.item.caissierPseudo != null) _row('Caissier', widget.item.caissierPseudo!, AppColors.textSecondary),
               ]),
@@ -176,6 +187,75 @@ class _FactureEchangeDetailScreenState extends State<FactureEchangeDetailScreen>
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text(label, style: GoogleFonts.inter(fontSize: 12.5, color: AppColors.textSecondary)),
         Text(value, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: color)),
+      ]),
+    );
+  }
+}
+
+/// Carte "Article repris" / "Article remis" du détail d'échange.
+class _ArticleCard extends StatelessWidget {
+  const _ArticleCard({
+    required this.titre,
+    required this.icon,
+    required this.color,
+    required this.designation,
+    required this.qte,
+    required this.champs,
+    required this.pied,
+  });
+  final String titre;
+  final IconData icon;
+  final Color color;
+  final String designation;
+  final double qte;
+  final List<MapEntry<String, String>> champs;
+  final List<MapEntry<String, String>> pied;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(titre, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: color, letterSpacing: .04)),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(
+            child: Text(designation, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          ),
+          Text('x${qte.toStringAsFixed(qte == qte.roundToDouble() ? 0 : 2)}',
+              style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.accentLight)),
+        ]),
+        if (champs.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 14,
+            runSpacing: 4,
+            children: champs
+                .map((c) => RichText(
+                      text: TextSpan(
+                        style: GoogleFonts.inter(fontSize: 11.5),
+                        children: [
+                          TextSpan(text: '${c.key}: ', style: const TextStyle(color: AppColors.textMuted)),
+                          TextSpan(text: c.value, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ))
+                .toList(),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Wrap(spacing: 16, runSpacing: 4, children: [
+          for (final p in pied) Text('${p.key} : ${p.value}', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w600, color: color)),
+        ]),
       ]),
     );
   }
