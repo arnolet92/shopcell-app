@@ -12,6 +12,7 @@ import '../../services/app_data_cache.dart';
 import '../../services/auth_service.dart';
 import '../../services/cart_service.dart';
 import '../../services/produit_service.dart';
+import '../echange/echange_simulation_screen.dart';
 import '../vente/cart_screen.dart';
 import 'produit_form_screen.dart';
 import 'widgets/achat_confirme_widgets.dart';
@@ -854,7 +855,8 @@ class _ProduitListScreenState extends State<ProduitListScreen> {
 class _VueTabs extends StatelessWidget {
   const _VueTabs({required this.vue, required this.onChanged, this.stockOnly = false, this.patron = false});
   final ProduitVue vue;
-  /// Compte "stock" : seulement les 4 pages autorisées (comme côté web).
+  /// Compte "stock" : seulement les 4 pages autorisées + la simulation
+  /// d'échange (comme côté web).
   final bool stockOnly;
   final bool patron;
   final ValueChanged<ProduitVue> onChanged;
@@ -888,6 +890,21 @@ class _VueTabs extends StatelessWidget {
       child: Row(
         children: [
           chip(ProduitVue.tous, "Gestion d'article", Icons.list_rounded),
+          // Compte stock : onglet "Simulation échange" (comme Produit/lst
+          // côté web) — simple calculateur local, rien n'est enregistré.
+          if (stockOnly)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ActionChip(
+                avatar: const Icon(Icons.calculate_rounded, size: 14, color: Color(0xFFA78BFA)),
+                label: const Text('Simulation échange', style: TextStyle(fontSize: 12.5, color: Color(0xFFA78BFA))),
+                backgroundColor: const Color(0x1AA78BFA),
+                side: const BorderSide(color: Color(0x59A78BFA)),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EchangeSimulationScreen()),
+                ),
+              ),
+            ),
           chip(ProduitVue.attente, 'En attente', Icons.access_time_rounded),
           chip(ProduitVue.apresEchange, 'Après échange', Icons.undo_rounded),
           if (!stockOnly) chip(ProduitVue.vente, 'Articles vendus', Icons.shopping_cart_rounded),
