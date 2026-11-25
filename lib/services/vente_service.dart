@@ -10,8 +10,12 @@ import '../models/user_model.dart';
 import 'cart_service.dart';
 
 class SaleResult {
-  SaleResult({required this.success, this.message, this.idClient, this.numeroFacture, this.dateFacture});
+  SaleResult({required this.success, this.message, this.idClient, this.numeroFacture, this.dateFacture, this.idPersonnes, this.idExistant});
   final bool success;
+  /// `Mob/addpersonnes` : id du client créé, ou du client identique (même
+  /// nom ET même prénom) déjà enregistré.
+  final String? idPersonnes;
+  final String? idExistant;
   final String? message;
   final String? idClient;
   final String? numeroFacture;
@@ -75,7 +79,8 @@ class VenteService {
     });
     if (data is! Map) return SaleResult(success: false, message: 'Réponse invalide.');
     final error = data['error'] == true;
-    return SaleResult(success: !error, message: data['msg']?.toString());
+    String? s(dynamic v) => (v == null || '$v'.isEmpty) ? null : '$v';
+    return SaleResult(success: !error, message: data['msg']?.toString(), idPersonnes: s(data['id']), idExistant: s(data['id_existant']));
   }
 
   Future<List<LookupItem>> loadTypesPaiement() async {

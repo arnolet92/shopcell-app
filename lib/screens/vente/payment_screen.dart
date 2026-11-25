@@ -11,6 +11,7 @@ import '../../services/app_data_cache.dart';
 import '../../services/cart_service.dart';
 import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
+import '../../widgets/client_suggestions.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
 
@@ -121,14 +122,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   /// apparaître des clients. La recherche porte sur nom, prénom, CIN et
   /// téléphone.
   List<PersonneModel> get _filteredClients {
-    final q = _clientSearchCtrl.text.trim().toLowerCase();
-    if (q.isEmpty) return const [];
-    return _clients.where((c) {
-      return c.nomComplet.toLowerCase().contains(q) ||
-          (c.prenom ?? '').toLowerCase().contains(q) ||
-          (c.cin ?? '').toLowerCase().contains(q) ||
-          (c.telephone ?? '').toLowerCase().contains(q);
-    }).take(15).toList();
+    return ClientDirectory.filtrer(_clients, _clientSearchCtrl.text, max: 15);
   }
 
   /// Ouvre le formulaire complet (nom, prénom, CIN, téléphone) plutôt que de
@@ -146,6 +140,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
     if (saisie == null || !mounted) return;
 
+    // Client existant choisi dans les suggestions du formulaire.
+    if (saisie.existant != null) {
+      setState(() {
+        _selectedClient = saisie.existant;
+        _clientSearchCtrl.clear();
+      });
+      return;
+    }
+
     setState(() => _submitting = true);
     final result = await VenteService.instance.addClient(
       saisie.nom,
@@ -154,9 +157,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
       telephone: saisie.telephone,
     );
     if (!mounted) return;
-    if (result.success) {
-      final refreshed = await VenteService.instance.loadClients();
-      final created = refreshed.where((c) => c.nomComplet.toLowerCase() == saisie.nom.toLowerCase()).toList();
+    // Même nom ET même prénom déjà enregistrés : on sélectionne ce client
+    // au lieu de bloquer (deux "Jean" de prénoms différents sont, eux,
+    // créés normalement).
+    final id = result.success ? result.idPersonnes : result.idExistant;
+    if (id != null) {
+      final refreshed = await ClientDirectory.instance.get(refresh: true);
+      if (!mounted) return;
+      final trouves = refreshed.where((c) => c.id == id).toList();
+      setState(() {
+        _clients = refreshed;
+        _selectedClient = trouves.isNotEmpty ? trouves.first : null;
+        _clientSearchCtrl.clear();
+        _submitting = false;
+      });
+      if (!result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${result.message ?? 'Ce client existe déjà'} — client sélectionné.')));
+      }
+    } else if (result.success) {
+      final refreshed = await ClientDirectory.instance.get(refresh: true);
+      final created = refreshed.where((c) =>
+          c.nomComplet.toLowerCase() == saisie.nom.toLowerCase() &&
+          (c.prenom ?? '').toLowerCase() == (saisie.prenom ?? '').toLowerCase()).toList();
       setState(() {
         _clients = refreshed;
         _selectedClient = created.isNotEmpty ? created.last : null;
@@ -232,6 +254,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
       final match = _clients.where((c) => c.nomComplet.trim().toLowerCase() == nom.toLowerCase()).toList();
+      // Plusieurs clients du même nom (ex. Jean Paul et Jean Denis) : on ne
+      // devine pas, l'utilisateur choisit dans les suggestions.
+      if (match.length > 1) {
+        setState(() => _error = "Plusieurs clients s'appellent « $nom » : choisissez le bon dans la liste des suggestions.");
+        return;
+      }
       if (match.isNotEmpty) {
         setState(() => _selectedClient = match.last);
       } else {
@@ -245,9 +273,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
           });
           return;
         }
-        final refreshed = await VenteService.instance.loadClients();
+        final refreshed = await ClientDirectory.instance.get(refresh: true);
         if (!mounted) return;
-        final nouveaux = refreshed.where((c) => c.nomComplet.trim().toLowerCase() == nom.toLowerCase()).toList();
+        final nouveaux = created.idPersonnes != null
+            ? refreshed.where((c) => c.id == created.idPersonnes).toList()
+            : refreshed.where((c) => c.nomComplet.trim().toLowerCase() == nom.toLowerCase()).toList();
         setState(() {
           _submitting = false;
           _clients = refreshed;
@@ -732,7 +762,9 @@ class _SummaryRow extends StatelessWidget {
 }
 
 class _NouveauClient {
-  _NouveauClient({required this.nom, this.prenom, this.cin, this.telephone});
+  _NouveauClient({required this.nom, this.prenom, this.cin, this.telephone, this.existant});
+  /// Client existant choisi dans les suggestions (rien à créer).
+  final PersonneModel? existant;
   final String nom;
   final String? prenom;
   final String? cin;
@@ -796,6 +828,10 @@ class _AddClientSheetState extends State<_AddClientSheet> {
             Text('Nouveau client', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
             const SizedBox(height: 16),
             InlineField(label: 'Nom', controller: _nomCtrl, prefixIcon: Icons.badge_rounded),
+            ClientSuggestions(
+              controller: _nomCtrl,
+              onSelect: (c) => Navigator.of(context).pop(_NouveauClient(nom: c.nomComplet, existant: c)),
+            ),
             const SizedBox(height: 12),
             InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.person_rounded),
             const SizedBox(height: 12),

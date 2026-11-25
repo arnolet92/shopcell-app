@@ -7,6 +7,7 @@ import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/cart_service.dart';
 import '../../services/vente_service.dart';
+import '../../widgets/client_suggestions.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/inline_field.dart';
 import '../../widgets/produit_image.dart';
@@ -378,7 +379,8 @@ class _EnAttenteSheetState extends State<_EnAttenteSheet> {
   List<PersonneModel> get _filteredClients {
     final q = _clientSearchCtrl.text.trim().toLowerCase();
     if (q.isEmpty) return widget.clients.take(6).toList();
-    return widget.clients.where((c) => c.nomComplet.toLowerCase().contains(q)).take(10).toList();
+    if (q.length < 2) return widget.clients.where((c) => c.nomComplet.toLowerCase().contains(q)).take(10).toList();
+    return ClientDirectory.filtrer(widget.clients, q, max: 10);
   }
 
   Future<void> _submit() async {
@@ -427,7 +429,7 @@ class _EnAttenteSheetState extends State<_EnAttenteSheet> {
                     children: [
                       const Icon(Icons.person_rounded, size: 17, color: AppColors.accentLight),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(_selectedClient!.nomComplet, style: const TextStyle(color: AppColors.textPrimary))),
+                      Expanded(child: Text('${_selectedClient!.nomComplet} ${_selectedClient!.prenom ?? ''}'.trim(), style: const TextStyle(color: AppColors.textPrimary))),
                       GestureDetector(onTap: () => setState(() => _selectedClient = null), child: const Icon(Icons.close_rounded, size: 17, color: AppColors.textMuted)),
                     ],
                   ),
@@ -440,7 +442,7 @@ class _EnAttenteSheetState extends State<_EnAttenteSheet> {
                   runSpacing: 8,
                   children: _filteredClients
                       .map((c) => ActionChip(
-                            label: Text(c.nomComplet, style: const TextStyle(fontSize: 12)),
+                            label: Text('${c.nomComplet} ${c.prenom ?? ''}'.trim(), style: const TextStyle(fontSize: 12)),
                             backgroundColor: AppColors.bgElevated,
                             onPressed: () => setState(() => _selectedClient = c),
                           ))

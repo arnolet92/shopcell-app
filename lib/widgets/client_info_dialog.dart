@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
+import 'client_suggestions.dart';
 import 'inline_field.dart';
 
 class ClientInfoResult {
@@ -42,6 +43,15 @@ Future<ClientInfoResult?> showClientInfoDialog(
             ),
             const SizedBox(height: 14),
             InlineField(label: 'Nom', controller: nomCtrl, prefixIcon: Icons.person_rounded),
+            ClientSuggestions(
+              controller: nomCtrl,
+              onSelect: (c) {
+                nomCtrl.text = c.nomComplet;
+                prenomCtrl.text = c.prenom ?? '';
+                telCtrl.text = c.telephone ?? '';
+                cinCtrl.text = c.cin ?? '';
+              },
+            ),
             const SizedBox(height: 10),
             InlineField(label: 'Prénom', controller: prenomCtrl, prefixIcon: Icons.badge_rounded),
             const SizedBox(height: 10),

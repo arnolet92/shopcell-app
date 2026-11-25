@@ -120,6 +120,28 @@ class ProduitGroupCard extends StatefulWidget {
 class _ProduitGroupCardState extends State<ProduitGroupCard> {
   // Entêtes seules d'abord ; un tap déplie la liste avec les détails.
   late bool _expanded = widget.startExpanded;
+  // Filtre par capacité (clic sur une puce, comme `filterByCapacity()` de
+  // tabproduit2.php) : n'affiche que les unités de cette capacité ; un
+  // second clic sur la même puce (ou "Tout afficher") annule le filtre.
+  String? _capFiltre;
+
+  void _toggleCapacite(String cap) {
+    setState(() {
+      _capFiltre = _capFiltre == cap ? null : cap;
+      if (_capFiltre != null) _expanded = true;
+    });
+  }
+
+  /// Capacités triées numériquement (16 Go < 128 Go), comme le `uksort` web.
+  List<MapEntry<String, double>> _capacitesTriees(ProduitGroup group) {
+    int n(String s) => int.tryParse(RegExp(r'\d+').firstMatch(s)?.group(0) ?? '') ?? 0;
+    final list = group.stockByCapacity.entries.toList();
+    list.sort((a, b) {
+      final c = n(a.key).compareTo(n(b.key));
+      return c != 0 ? c : a.key.compareTo(b.key);
+    });
+    return list;
+  }
 
   String _fmt(double v) {
     final s = v.round().toString();
@@ -235,8 +257,20 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
                       spacing: 8,
                       runSpacing: 6,
                       children: [
-                        ...group.stockByCapacity.entries.map(
-                          (e) => _DimChip(icon: Icons.memory_rounded, label: '${e.key} · ${e.value.toStringAsFixed(0)}'),
+                        if (group.stockByCapacity.length > 1)
+                          _CapChip(
+                            label: 'Tout afficher',
+                            icon: Icons.format_list_bulleted_rounded,
+                            active: _capFiltre == null,
+                            onTap: () => setState(() => _capFiltre = null),
+                          ),
+                        ..._capacitesTriees(group).map(
+                          (e) => _CapChip(
+                            label: '${e.key} · ${e.value.toStringAsFixed(0)}',
+                            icon: Icons.memory_rounded,
+                            active: _capFiltre == e.key,
+                            onTap: () => _toggleCapacite(e.key),
+                          ),
                         ),
                         ...group.stockByLocation.entries.map(
                           (e) => _DimChip(icon: Icons.place_rounded, label: '${e.key} · ${e.value.toStringAsFixed(0)}'),
@@ -312,8 +346,10 @@ class _ProduitGroupCardState extends State<ProduitGroupCard> {
 extension on _ProduitGroupCardState {
   /// Unités triées par fournisseur quand il est visible (ordre stable sinon).
   List<ProduitModel> _itemsTries(ProduitGroup group) {
-    if (!widget.showFournisseur) return group.items;
-    final list = [...group.items];
+    final cap = _capFiltre;
+    final base = cap == null ? group.items : group.items.where((p) => p.nomMarque == cap).toList();
+    if (!widget.showFournisseur) return base;
+    final list = [...base];
     list.sort((a, b) => ProduitGroup.fournisseurLabel(a).toLowerCase().compareTo(ProduitGroup.fournisseurLabel(b).toLowerCase()));
     return list;
   }
@@ -368,6 +404,43 @@ class _Badge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+}
+
+/// Puce de capacité cliquable (filtre les unités du groupe).
+class _CapChip extends StatelessWidget {
+  const _CapChip({required this.label, required this.icon, required this.active, required this.onTap});
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.accentLight : AppColors.textSecondary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: active ? AppColors.accentGlow : Colors.transparent,
+            border: Border.all(color: active ? AppColors.accentLight : AppColors.border),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 11, color: active ? AppColors.accentLight : AppColors.textMuted),
+              const SizedBox(width: 5),
+              Text(label, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: active ? FontWeight.w700 : FontWeight.w500, color: color)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

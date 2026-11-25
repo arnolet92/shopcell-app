@@ -3,11 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme.dart';
 import '../../models/facture_model.dart';
+import '../../models/personne_model.dart';
 import '../../models/receipt_line.dart';
 import '../../models/user_model.dart';
 import '../../services/app_data_cache.dart';
 import '../../services/facture_service.dart';
 import '../../services/receipt_print_service.dart';
+import '../../widgets/client_suggestions.dart';
 import '../../widgets/inline_field.dart';
 
 String _fmt(double v) {
@@ -344,7 +346,8 @@ class _FactureDetailScreenState extends State<FactureDetailScreen> {
       prenom: saisie.prenom,
       telephone: saisie.telephone,
       cin: saisie.cin,
-      nouveau: saisie.nouveau || _personnesId == null,
+      nouveau: saisie.idPersonnes == null && (saisie.nouveau || _personnesId == null),
+      idPersonnes: saisie.idPersonnes,
     );
     if (!mounted) return;
     if (!result.success) {
@@ -972,7 +975,9 @@ class _PrintPillButton extends StatelessWidget {
 }
 
 class _ClientInfoResult {
-  _ClientInfoResult({required this.nom, this.prenom, this.telephone, this.cin, required this.nouveau});
+  _ClientInfoResult({required this.nom, this.prenom, this.telephone, this.cin, required this.nouveau, this.idPersonnes});
+  /// Client existant choisi dans les suggestions (rattaché tel quel).
+  final String? idPersonnes;
   final String nom;
   final String? prenom;
   final String? telephone;
@@ -1007,6 +1012,35 @@ class _ClientInfoSheetState extends State<_ClientInfoSheet> {
   late final _telephoneCtrl = TextEditingController(text: widget.telephoneInitial ?? '');
   late final _cinCtrl = TextEditingController(text: widget.cinInitial ?? '');
   bool _nouveau = false;
+  // Client existant choisi dans les suggestions ; oublié dès que le nom ou
+  // le prénom ne correspond plus (c'est alors une autre personne).
+  PersonneModel? _choisi;
+
+  @override
+  void initState() {
+    super.initState();
+    _nomCtrl.addListener(_verifierChoix);
+    _prenomCtrl.addListener(_verifierChoix);
+  }
+
+  void _verifierChoix() {
+    final c = _choisi;
+    if (c == null) return;
+    if (_nomCtrl.text.trim() != c.nomComplet.trim() || _prenomCtrl.text.trim() != (c.prenom ?? '').trim()) {
+      setState(() => _choisi = null);
+    }
+  }
+
+  void _choisirClient(PersonneModel c) {
+    _nomCtrl.text = c.nomComplet;
+    _prenomCtrl.text = c.prenom ?? '';
+    _telephoneCtrl.text = c.telephone ?? '';
+    _cinCtrl.text = c.cin ?? '';
+    setState(() {
+      _choisi = c;
+      _nouveau = false;
+    });
+  }
 
   @override
   void dispose() {
@@ -1025,7 +1059,8 @@ class _ClientInfoSheetState extends State<_ClientInfoSheet> {
       prenom: _prenomCtrl.text.trim().isEmpty ? null : _prenomCtrl.text.trim(),
       telephone: _telephoneCtrl.text.trim().isEmpty ? null : _telephoneCtrl.text.trim(),
       cin: _cinCtrl.text.trim().isEmpty ? null : _cinCtrl.text.trim(),
-      nouveau: _nouveau,
+      nouveau: _choisi == null && _nouveau,
+      idPersonnes: _choisi?.id,
     ));
   }
 
@@ -1054,13 +1089,20 @@ class _ClientInfoSheetState extends State<_ClientInfoSheet> {
             ),
             const SizedBox(height: 16),
             InlineField(label: 'Nom', controller: _nomCtrl, prefixIcon: Icons.badge_rounded),
+            ClientSuggestions(controller: _nomCtrl, onSelect: _choisirClient),
+            if (_choisi != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Client existant sélectionné : il sera rattaché à cette facture.',
+                    style: GoogleFonts.inter(fontSize: 11, color: AppColors.green)),
+              ),
             const SizedBox(height: 12),
             InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.person_rounded),
             const SizedBox(height: 12),
             InlineField(label: 'Téléphone', controller: _telephoneCtrl, prefixIcon: Icons.phone_rounded),
             const SizedBox(height: 12),
             InlineField(label: 'N°CIN', controller: _cinCtrl, prefixIcon: Icons.credit_card_rounded),
-            if (widget.aDejaUnClient) ...[
+            if (widget.aDejaUnClient && _choisi == null) ...[
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

@@ -14,6 +14,7 @@ import '../../services/app_data_cache.dart';
 import '../../services/echange_service.dart';
 import '../../services/receipt_print_service.dart';
 import '../../services/vente_service.dart';
+import '../../widgets/client_suggestions.dart';
 import '../../widgets/inline_field.dart';
 
 String _fmt(double v) {
@@ -106,6 +107,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   final _telCtrl = TextEditingController();
   final _cinCtrl = TextEditingController();
   String? _idPersonnes;
+  PersonneModel? _clientChoisi;
   List<PersonneModel> _clients = [];
   List<PersonneModel> _suggestions = [];
 
@@ -124,7 +126,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
         if (_paiements.isEmpty) _paiements.add(_Paiement(types.isNotEmpty ? types.first.id : null));
       });
     });
-    VenteService.instance.loadClients().then((c) {
+    ClientDirectory.instance.get().then((c) {
       if (mounted) _clients = c;
     });
   }
@@ -240,25 +242,31 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
   }
 
   void _onNom(String v) {
-    final q = v.trim().toLowerCase();
     setState(() {
-      if (q.isEmpty) _idPersonnes = null;
-      _suggestions = q.length < 2
-          ? []
-          : _clients
-              .where((c) =>
-                  c.nomComplet.toLowerCase().contains(q) ||
-                  (c.prenom ?? '').toLowerCase().contains(q) ||
-                  (c.telephone ?? '').toLowerCase().contains(q) ||
-                  (c.cin ?? '').toLowerCase().contains(q))
-              .take(6)
-              .toList();
+      _verifierChoix();
+      _suggestions = ClientDirectory.filtrer(_clients, v);
     });
+  }
+
+  /// Nom ou prénom modifié après avoir choisi un client : c'est une autre
+  /// personne (ex. Jean Paul -> Jean Denis), on ne met donc plus à jour la
+  /// fiche choisie ; un nouveau client sera enregistré.
+  void _verifierChoix() {
+    final c = _clientChoisi;
+    if (c == null) {
+      if (_nomCtrl.text.trim().isEmpty) _idPersonnes = null;
+      return;
+    }
+    if (_nomCtrl.text.trim() != c.nomComplet.trim() || _prenomCtrl.text.trim() != (c.prenom ?? '').trim()) {
+      _clientChoisi = null;
+      _idPersonnes = null;
+    }
   }
 
   void _choisirClient(PersonneModel c) {
     setState(() {
       _idPersonnes = c.id;
+      _clientChoisi = c;
       _nomCtrl.text = c.nomComplet;
       _prenomCtrl.text = c.prenom ?? '';
       _telCtrl.text = c.telephone ?? '';
@@ -939,7 +947,7 @@ class _EchangeDetailScreenState extends State<EchangeDetailScreen> {
               ),
             ),
           const SizedBox(height: 10),
-          InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.badge_outlined),
+          InlineField(label: 'Prénom', controller: _prenomCtrl, prefixIcon: Icons.badge_outlined, onChanged: (_) => setState(_verifierChoix)),
           const SizedBox(height: 10),
           InlineField(label: 'Téléphone', controller: _telCtrl, prefixIcon: Icons.phone_rounded, keyboardType: TextInputType.phone),
           const SizedBox(height: 10),

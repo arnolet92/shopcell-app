@@ -142,9 +142,11 @@ class FactureService {
     String? telephone,
     String? cin,
     bool nouveau = false,
+    String? idPersonnes,
   }) async {
     final data = await ApiClient.instance.post('update_client_facture', fields: {
       'id_client': idClient,
+      if (idPersonnes != null && idPersonnes.isNotEmpty) 'id_personnes': idPersonnes,
       'nom': nom,
       if (prenom != null && prenom.trim().isNotEmpty) 'prenom': prenom.trim(),
       if (telephone != null && telephone.trim().isNotEmpty) 'telephone': telephone.trim(),
